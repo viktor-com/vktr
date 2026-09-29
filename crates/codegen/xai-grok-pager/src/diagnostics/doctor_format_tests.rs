@@ -220,7 +220,12 @@ fn tmux_config_and_reload_notes_output_is_stable() {
 }
 
 #[test]
+// Pins the process-global terminal-theme flag; the prompt-widget accent test reads it, so take turns.
+#[serial_test::serial]
 fn limited_color_output_is_stable() {
+    // The theme list reads a process-wide flag other tests in this binary flip; pin the
+    // default (terminal theme off) so the snapshot cannot depend on test scheduling.
+    crate::theme::cache::set_terminal_theme_enabled(false);
     let terminal = ghostty(false);
     let output = build_doctor(snapshot(
         &terminal,
@@ -240,7 +245,8 @@ fn limited_color_output_is_stable() {
             "  multiplexer  None detected\n",
             "  ssh          no\n",
             "  color        256\n",
-            "  themes       3/6: groknight, grokday, terminal\n",
+            // The `terminal` theme sits behind VKTR_TERMINAL_THEME, which vktr leaves off by default.
+            "  themes       2/5: groknight, grokday\n",
             "\n",
             "Clipboard\n",
             "  native       local (pbcopy)\n",
@@ -259,7 +265,12 @@ fn limited_color_output_is_stable() {
 }
 
 #[test]
+// Pins the process-global terminal-theme flag; the prompt-widget accent test reads it, so take turns.
+#[serial_test::serial]
 fn unwrapped_ssh_recommendation_with_no_issues_output_is_stable() {
+    // The theme list reads a process-wide flag other tests in this binary flip; pin the
+    // default (terminal theme off) so the snapshot cannot depend on test scheduling.
+    crate::theme::cache::set_terminal_theme_enabled(false);
     let terminal = ghostty(true);
     let output = build_doctor(snapshot(
         &terminal,
@@ -336,7 +347,12 @@ fn wrapped_ssh_output_has_no_recommendation() {
 }
 
 #[test]
+// Pins the process-global terminal-theme flag; the prompt-widget accent test reads it, so take turns.
+#[serial_test::serial]
 fn wezterm_xtversion_runtime_evidence_output_is_stable() {
+    // The theme list reads a process-wide flag other tests in this binary flip; pin the
+    // default (terminal theme off) so the snapshot cannot depend on test scheduling.
+    crate::theme::cache::set_terminal_theme_enabled(false);
     let terminal = TerminalContext {
         is_ssh: true,
         ..Default::default()

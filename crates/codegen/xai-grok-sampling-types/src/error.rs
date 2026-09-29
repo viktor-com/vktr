@@ -193,6 +193,9 @@ pub enum SamplingError {
 /// Semantic `error.code` the server stamps on invalid-image rejections, on both non-stream error bodies and mid-stream SSE error events.
 pub const INVALID_IMAGE_ERROR_CODE: &str = "invalid_image";
 
+/// Viktor compat API error code for a run that ended without a reply (see `SamplingError::is_viktor_run_failed`).
+pub const VIKTOR_RUN_FAILED_ERROR_CODE: &str = "run_failed";
+
 /// Content path some upstream providers key codeless image rejections on (`.image.source.base64.data`/`.url`). Those
 /// arrive as `invalid_request_error` with no `error.code`, so [`INVALID_IMAGE_ERROR_CODE`] misses them. The fragment
 /// appears only when the request carried an image, so stripping is safe recovery.
@@ -338,6 +341,20 @@ impl SamplingError {
         )
     }
 
+    /// Viktor's HTTP 409 `conversation_busy`: the thread still has a run in progress, typically the run of
+    /// a turn the user just cancelled, which Viktor takes about 15 s to stop after the stream is closed
+    /// (measured 2026-09-23). Transient: retrying with backoff reaches the thread once it is free.
+    pub fn is_conversation_busy(&self) -> bool {
+        matches!(
+            self,
+            SamplingError::Api {
+                status: StatusCode::CONFLICT,
+                message,
+                ..
+            } if message.contains("conversation_busy") || message.contains("response in progress")
+        )
+    }
+
     pub fn is_payload_too_large(&self) -> bool {
         matches!(
             self,
@@ -414,7 +431,9 @@ impl SamplingError {
             SamplingError::MtlsConfiguration(_) => false,
             SamplingError::Http(err) => is_retryable_reqwest(err),
             SamplingError::Serialization(_) => false,
-            SamplingError::Api { status, .. } => is_retryable_api_status(*status),
+            SamplingError::Api { status, .. } => {
+                is_retryable_api_status(*status) || self.is_conversation_busy()
+            }
             SamplingError::EventStreamError(_) => true,
             SamplingError::StreamError { .. } => true,
             SamplingError::IdleTimeout { .. } => false,
@@ -537,7 +556,24 @@ impl SamplingError {
     /// `x-should-retry: false`: the server says the request content caused the failure, not something transient;
     /// Context-length overflow: deterministic; re-sending the same payload always fails.
     pub fn is_retry_vetoed(&self) -> bool {
-        self.should_retry_header() == Some(false) || self.is_context_length_error()
+        self.should_retry_header() == Some(false)
+            || self.is_context_length_error()
+            || self.is_viktor_run_failed()
+    }
+
+    /// True for the Viktor compat API's `run_failed` error: the run ended without a reply (HTTP 502 body or the
+    /// in-stream `{"error": {"code": "run_failed"}}` frame). The server has already retried the empty model
+    /// stream once, and a resend starts a second billed agent run, so this is shown to the user immediately.
+    pub fn is_viktor_run_failed(&self) -> bool {
+        let code = match self {
+            SamplingError::Api { error_code, .. } => error_code.as_ref(),
+            SamplingError::StreamError { code, .. } => code.as_ref(),
+            _ => None,
+        };
+        code.is_some_and(|c| {
+            c.as_str()
+                .eq_ignore_ascii_case(VIKTOR_RUN_FAILED_ERROR_CODE)
+        })
     }
 }
 
@@ -773,6 +809,29 @@ fn message_looks_overloaded(message: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_busy_viktor_thread_is_retried_but_other_conflicts_are_not() {
+        let api = |status: StatusCode, message: &str| SamplingError::Api {
+            status,
+            message: message.to_owned(),
+            model_metadata: None,
+            retry_after_secs: None,
+            should_retry: None,
+            error_code: None,
+        };
+        // The message vktr shows for the live 409 (captured 2026-09-23).
+        let busy = api(
+            StatusCode::CONFLICT,
+            "invalid_request_error: This conversation has a response in progress. Wait for it to finish, then retry.",
+        );
+        assert!(busy.is_conversation_busy());
+        assert!(busy.is_retryable());
+        assert!(!busy.is_retry_vetoed());
+        let other = api(StatusCode::CONFLICT, "version conflict");
+        assert!(!other.is_conversation_busy());
+        assert!(!other.is_retryable());
+    }
 
     #[test]
     fn overloaded_detects_stream_and_api_shapes() {

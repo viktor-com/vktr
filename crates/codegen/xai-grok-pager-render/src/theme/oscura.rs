@@ -131,6 +131,11 @@ impl Theme {
             md_code_bg: CODE_BG,
             md_text: TEXT,
             link_fg: CYAN,
+
+            brand: PURPLE,
+            brand_deep: PURPLE_DIM,
+            brand_glint: rgb(255, 255, 255),
+            brand_gradient: [PURPLE_DIM, PURPLE, PURPLE_BRIGHT, AMBER, GOLD],
         }
     }
 }

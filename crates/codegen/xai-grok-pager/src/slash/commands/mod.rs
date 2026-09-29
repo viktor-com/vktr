@@ -393,7 +393,7 @@ mod tests {
         let models = sample_models();
         let mut ctx = make_ctx(&models);
         let cmd = model::ModelCommand;
-        let result = cmd.run(&mut ctx, "vktr 4.5");
+        let result = cmd.run(&mut ctx, "Grok 4.5");
         match result {
             CommandResult::Action(Action::SetDefaultModel(id)) => {
                 assert_eq!(id.0.as_ref(), "grok-4.5");

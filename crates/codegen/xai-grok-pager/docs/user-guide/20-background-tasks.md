@@ -2,6 +2,8 @@
 
 vktr runs long-lived processes without blocking the conversation. This document covers background commands, the `/loop` command, the `monitor` tool, and the scheduler.
 
+In vktr the `monitor` and `scheduler_*` tools, and subagents, are left out of the lean default toolset, because every tool schema is resent with each request to Viktor. Set `VKTR_FULL_TOOLSET=1` to use them (or `VKTR_SUBAGENTS=1` for subagents alone). Background commands work by default.
+
 ---
 
 ## Background Commands

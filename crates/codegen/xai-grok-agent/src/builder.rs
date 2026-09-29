@@ -730,6 +730,7 @@ impl AgentBuilder {
         );
         if self.prompt_audience == PromptAudience::Primary
             && is_parent_grok_build
+            && xai_backed_tools_enabled()
             && !tool_config
                 .tools
                 .iter()
@@ -749,7 +750,7 @@ impl AgentBuilder {
                     .tools
                     .push((&memory::get_tool::MemoryGetImpl).into());
             }
-            if self.web_search_config.is_enabled() {
+            if self.web_search_config.is_enabled() && xai_backed_tools_enabled() {
                 use xai_grok_tools::implementations::grok_build;
                 tool_config.tools.push((&grok_build::WebSearchTool).into());
             }
@@ -762,17 +763,17 @@ impl AgentBuilder {
                     .tools
                     .push((&xai_grok_tools::implementations::grok_build::LspTool).into());
             }
-            if self.image_gen_config.image_gen_enabled() {
+            if self.image_gen_config.image_gen_enabled() && xai_backed_tools_enabled() {
                 tool_config
                     .tools
                     .push((&xai_grok_tools::implementations::grok_build::ImageGenTool).into());
             }
-            if self.image_gen_config.image_edit_enabled() {
+            if self.image_gen_config.image_edit_enabled() && xai_backed_tools_enabled() {
                 tool_config
                     .tools
                     .push((&xai_grok_tools::implementations::grok_build::ImageEditTool).into());
             }
-            if self.video_gen_config.is_enabled() {
+            if self.video_gen_config.is_enabled() && xai_backed_tools_enabled() {
                 tool_config
                     .tools
                     .push((&xai_grok_tools::implementations::grok_build::ImageToVideoTool).into());
@@ -1475,8 +1476,32 @@ fn resolve_shell_for_prompt() -> String {
             .to_string()
     }
 }
+/// Tools that only work against xAI's own backend: `web_search` (xAI Responses search model),
+/// `image_gen` / `image_edit` / video generation, and `send_feedback` (xAI feedback endpoint).
+/// vktr talks to Viktor or a local OpenAI-compatible backend, where advertising them would only
+/// produce failing tool calls, so they are off unless `VKTR_XAI_BACKED_TOOLS=1`.
+fn xai_backed_tools_enabled() -> bool {
+    std::env::var("VKTR_XAI_BACKED_TOOLS")
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
+
+    /// vktr advertises the xAI-backed tools (web search, image and video generation,
+    /// send_feedback) only when `VKTR_XAI_BACKED_TOOLS=1`; the tests below exercise those
+    /// tool lists, so they opt in. No test in this binary asserts the tools' absence, so the
+    /// process-wide flag cannot race a sibling into failing.
+    fn enable_xai_backed_tools_for_test() {
+        // SAFETY: test-only, single writer, and every reader tolerates either value.
+        unsafe { std::env::set_var("VKTR_XAI_BACKED_TOOLS", "1") };
+    }
     use super::*;
     use crate::config::AgentScope;
     use xai_grok_tools::types::definition::ToolDefinition;
@@ -2026,6 +2051,7 @@ mod tests {
     }
     #[tokio::test]
     async fn pager_flag_combinations_satisfy_tool_invariants() {
+        enable_xai_backed_tools_for_test();
         use crate::config::AgentDefinition;
         struct PagerFlagCase {
             label: &'static str,
@@ -2272,6 +2298,7 @@ mod tests {
     }
     #[tokio::test]
     async fn plan_fragment_lists_web_search_when_the_parent_enables_it() {
+        enable_xai_backed_tools_for_test();
         use xai_grok_tools::implementations::web_search::WebSearchConfig;
         let enabled = WebSearchConfig::Enabled {
             api_key: "test-key".into(),
@@ -2305,6 +2332,7 @@ mod tests {
     /// "Read-only" follows the read-only capability allowlist, so a child handed a generating tool loses the prefix.
     #[tokio::test]
     async fn explore_fragment_drops_read_only_prefix_when_image_generation_is_enabled() {
+        enable_xai_backed_tools_for_test();
         use xai_grok_tools::implementations::grok_build::image_gen::ImageGenConfig;
         let image_gen = ImageGenConfig::Enabled {
             api_key: Some("test-key".into()),
@@ -3020,6 +3048,7 @@ mod tests {
     }
     #[tokio::test]
     async fn requested_enabled_web_tools_survive_allowlist() {
+        enable_xai_backed_tools_for_test();
         use xai_grok_tools::computer::local::LocalTerminalBackend;
         use xai_grok_tools::implementations::grok_build::web_fetch::WebFetchConfig;
         use xai_grok_tools::implementations::web_search::WebSearchConfig;

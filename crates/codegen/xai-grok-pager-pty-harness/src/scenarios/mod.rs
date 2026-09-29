@@ -52,6 +52,11 @@ pub enum Scenario {
 }
 
 impl Scenario {
+    /// The snake_case name used in CLI flags, logs and result files.
+    pub fn as_str(self) -> &'static str {
+        self.into()
+    }
+
     /// Every scenario, in dispatch order.
     pub const ALL: &'static [Scenario] = &[
         Scenario::ScrollStress,

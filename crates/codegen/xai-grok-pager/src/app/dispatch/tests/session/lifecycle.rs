@@ -1589,7 +1589,7 @@ fn trust_folder_quits_when_store_unreadable() {
         "unread store must record a post-exit error: {msg}"
     );
     assert!(
-        msg.contains("Fix or delete ~/.grok/trusted_folders.toml"),
+        msg.contains("Fix or delete ~/.vktr/trusted_folders.toml"),
         "unread store must name the next step: {msg}"
     );
 }
@@ -1622,7 +1622,7 @@ fn trust_folder_continues_session_only_when_embedded_and_persist_denied() {
         .map(|(m, _)| m.as_str())
         .unwrap_or_default();
     assert!(
-        toast.contains("grok --trust"),
+        toast.contains("vktr --trust"),
         "a session-only grant must show how to persist: {toast}"
     );
 }
@@ -2043,10 +2043,8 @@ fn login_mid_session_switches_to_welcome_and_stashes_view() {
     assert_eq!(app.auth_return_view, Some(ActiveView::Agent(AgentId(0))));
     assert!(matches!(app.auth_state, AuthState::Authenticating { .. }));
     assert!(
-        effects
-            .iter()
-            .any(|e| matches!(e, Effect::Authenticate { .. })),
-        "must still kick off the auth flow",
+        effects.is_empty(),
+        "vktr's sign-in is the paste box itself; no browser flow starts",
     );
 }
 /// A mid-session `/login` switches to the welcome view to host the auth flow.

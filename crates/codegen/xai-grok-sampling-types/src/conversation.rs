@@ -492,6 +492,141 @@ pub struct ToolSpec {
     pub parameters: serde_json::Value,
 }
 
+impl ToolSpec {
+    /// The parameter schema as it goes on the wire. See [`flatten_top_level_combinators`].
+    pub fn wire_parameters(&self) -> serde_json::Value {
+        flatten_top_level_combinators(&self.parameters)
+    }
+}
+
+/// Providers behind the Viktor compat API (Anthropic) reject a tool whose input schema has `oneOf`,
+/// `anyOf` or `allOf` at the top level (`input_schema does not support oneOf, allOf, or anyOf at the top
+/// level`), and one rejected tool fails the whole request. Fold such a schema into a plain object schema:
+/// every branch's properties are merged in, `required` keeps what all `oneOf`/`anyOf` branches agree on plus
+/// everything `allOf` demands. The "exactly one of" constraint is lost on the wire; the tool still validates
+/// its real input, so a wrong combination comes back as an ordinary tool error. Other schemas pass through.
+pub fn flatten_top_level_combinators(schema: &serde_json::Value) -> serde_json::Value {
+    const COMBINATORS: [&str; 3] = ["oneOf", "anyOf", "allOf"];
+    let Some(obj) = schema.as_object() else {
+        return schema.clone();
+    };
+    if !COMBINATORS.iter().any(|key| obj.contains_key(*key)) {
+        return schema.clone();
+    }
+    let mut out = obj.clone();
+    let mut properties = out
+        .get("properties")
+        .and_then(|p| p.as_object())
+        .cloned()
+        .unwrap_or_default();
+    let mut required: std::collections::BTreeSet<String> = out
+        .get("required")
+        .and_then(|r| r.as_array())
+        .map(|names| {
+            names
+                .iter()
+                .filter_map(|n| n.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    for key in COMBINATORS {
+        let Some(serde_json::Value::Array(branches)) = out.remove(key) else {
+            continue;
+        };
+        let mut agreed: Option<std::collections::BTreeSet<String>> = None;
+        for branch in &branches {
+            if let Some(props) = branch.get("properties").and_then(|p| p.as_object()) {
+                for (name, prop) in props {
+                    properties
+                        .entry(name.clone())
+                        .or_insert_with(|| prop.clone());
+                }
+            }
+            let branch_required: std::collections::BTreeSet<String> = branch
+                .get("required")
+                .and_then(|r| r.as_array())
+                .map(|names| {
+                    names
+                        .iter()
+                        .filter_map(|n| n.as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default();
+            if key == "allOf" {
+                required.extend(branch_required);
+            } else {
+                agreed = Some(match agreed {
+                    Some(prev) => prev.intersection(&branch_required).cloned().collect(),
+                    None => branch_required,
+                });
+            }
+        }
+        required.extend(agreed.unwrap_or_default());
+    }
+    out.insert("type".into(), serde_json::Value::String("object".into()));
+    out.insert("properties".into(), serde_json::Value::Object(properties));
+    if required.is_empty() {
+        out.remove("required");
+    } else {
+        out.insert(
+            "required".into(),
+            serde_json::Value::Array(
+                required
+                    .into_iter()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ),
+        );
+    }
+    serde_json::Value::Object(out)
+}
+
+#[cfg(test)]
+mod wire_parameter_tests {
+    use super::flatten_top_level_combinators;
+    use serde_json::json;
+
+    #[test]
+    fn plain_object_schemas_pass_through() {
+        let schema =
+            json!({"type": "object", "properties": {"a": {"type": "string"}}, "required": ["a"]});
+        assert_eq!(flatten_top_level_combinators(&schema), schema);
+    }
+
+    #[test]
+    fn one_of_branches_merge_and_keep_only_agreed_required() {
+        let schema = json!({
+            "type": "object",
+            "properties": {"tool_name": {"type": "string"}},
+            "oneOf": [
+                {"properties": {"tool_name": {"type": "string"}, "tool_input": {"type": "object"}}, "required": ["tool_name", "tool_input"]},
+                {"properties": {"tool_name": {"type": "string"}, "tool_input_file": {"type": "string"}}, "required": ["tool_name", "tool_input_file"]}
+            ]
+        });
+        let flat = flatten_top_level_combinators(&schema);
+        assert!(flat.get("oneOf").is_none());
+        let props = flat["properties"].as_object().unwrap();
+        assert!(props.contains_key("tool_input") && props.contains_key("tool_input_file"));
+        assert_eq!(flat["required"], json!(["tool_name"]));
+    }
+
+    #[test]
+    fn all_of_unions_required_and_nested_combinators_are_left_alone() {
+        let schema = json!({
+            "allOf": [
+                {"properties": {"a": {"anyOf": [{"type": "string"}, {"type": "null"}]}}, "required": ["a"]},
+                {"properties": {"b": {"type": "integer"}}, "required": ["b"]}
+            ]
+        });
+        let flat = flatten_top_level_combinators(&schema);
+        assert_eq!(flat["required"], json!(["a", "b"]));
+        assert!(
+            flat["properties"]["a"].get("anyOf").is_some(),
+            "only the top level is flattened"
+        );
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HostedTool {
     WebSearch { options: Option<WebSearchOptions> },
@@ -3116,7 +3251,7 @@ mod tests {
         // Forward direction: root to worktree (forking)
         // Tool call arguments are transformed so the fork session's history has consistent worktree paths everywhere
         let root = "/home/user/myproject";
-        let worktree = "/home/user/.grok/worktrees/myproject/fork-a";
+        let worktree = "/home/user/.vktr/worktrees/myproject/fork-a";
 
         let mut items = vec![
             ConversationItem::system(format!("Working in {root}.")),

@@ -543,7 +543,7 @@ pub async fn apply_post_login_config(
         }
         crate::managed_config::ManagedConfigSync::Staged => {
             eprintln!(
-                "Managed configuration update verified; it takes effect the next time Grok starts."
+                "Managed configuration update verified; it takes effect the next time vktr starts."
             );
         }
         _ => {}

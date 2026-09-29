@@ -4865,15 +4865,30 @@ fn shutdown_generation_invalidates_stale_restart() {
 /// `spawn_gateway_bridge` uses `tokio::task::spawn_local`.
 fn run_local_for_bridge_test<F, Fut, T>(body: F) -> T
 where
-    F: FnOnce() -> Fut,
+    F: FnOnce() -> Fut + Send,
     Fut: std::future::Future<Output = T>,
+    T: Send,
 {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("test runtime must build");
-    let local = tokio::task::LocalSet::new();
-    local.block_on(&rt, body())
+    // The attach/adopt state machines nest deeply enough that a debug build overflows the
+    // 2 MiB stack libtest gives each test thread (`adopting_attach_waits_for_the_installed_actors_stamp`
+    // aborted the whole binary with "has overflowed its stack"); run the body on a roomier
+    // scoped thread, which keeps borrowing callers working.
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .name("bridge-test".into())
+            .stack_size(16 << 20)
+            .spawn_scoped(scope, move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("test runtime must build");
+                let local = tokio::task::LocalSet::new();
+                local.block_on(&rt, body())
+            })
+            .expect("spawn bridge test thread")
+            .join()
+            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+    })
 }
 #[test]
 fn chat_session_spawn_options_matches_thin_profile() {

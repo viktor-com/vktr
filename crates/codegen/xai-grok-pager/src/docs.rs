@@ -48,12 +48,12 @@ pub static USER_GUIDE: &[Doc] = &[
     guide!(
         "01-getting-started.md",
         "Getting Started",
-        "Installation, first launch, and basic interaction"
+        "Install, sign in with a Viktor key, first session"
     ),
     guide!(
         "02-authentication.md",
         "Authentication",
-        "Browser login, API keys, OIDC, external auth providers"
+        "Viktor API key: vktr login, the sign-in screen, VIKTOR_API_KEY"
     ),
     guide!(
         "03-keyboard-shortcuts.md",
@@ -98,7 +98,7 @@ pub static USER_GUIDE: &[Doc] = &[
     guide!(
         "11-custom-models.md",
         "Custom Models",
-        "BYOK, Ollama, OpenAI-compatible endpoints"
+        "Viktor protocols, Ollama and other OpenAI-compatible endpoints"
     ),
     guide!(
         "12-project-rules.md",
@@ -118,12 +118,12 @@ pub static USER_GUIDE: &[Doc] = &[
     guide!(
         "15-agent-mode.md",
         "Agent Mode and IDE Integration",
-        "ACP stdio transport, WebSocket relay, SDK integration"
+        "vktr acp for Zed and JetBrains, vktr agent stdio, vktr launch"
     ),
     guide!(
         "16-subagents.md",
         "Subagents and Personas",
-        "Spawning parallel child agents with specialized roles"
+        "Child agents with roles (off unless VKTR_SUBAGENTS=1)"
     ),
     guide!(
         "17-sessions.md",
@@ -143,7 +143,7 @@ pub static USER_GUIDE: &[Doc] = &[
     guide!(
         "20-background-tasks.md",
         "Background Tasks and Monitoring",
-        "Background commands, /loop, monitor, scheduler"
+        "Background commands; /loop, monitor and scheduler with VKTR_FULL_TOOLSET=1"
     ),
     guide!(
         "21-terminal-support.md",

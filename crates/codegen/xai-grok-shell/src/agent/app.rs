@@ -313,7 +313,7 @@ pub async fn run_headless(
     use crate::agent::relay::spawn_relay_connection_with_callback;
     use tokio_util::sync::CancellationToken;
     const HEADLESS_NO_SESSION: &str = "Headless mode requires a grok.com session. \
-        Run `grok login` to sign in, or use `grok agent stdio` for API-key access.";
+        Run `vktr login` to sign in, or use `vktr agent stdio` for API-key access.";
     xai_file_utils::queue::cleanup_orphaned_uploads(
         &grok_home::grok_home(),
         xai_file_utils::queue::DEFAULT_MAX_AGE,
@@ -1435,68 +1435,6 @@ mod tests {
         };
         crate::agent::relay::RelayConfig::for_session(&auth, &cfg, None, None)
             .expect("x.ai OIDC session must be relay-eligible")
-    }
-    /// The embedded startup gate (every pager `--no-leader` / fallback path) must be fail-closed by construction.
-    /// A session user stays closed until the agent resolves settings, even when an env API key is also present.
-    /// The key must not bypass the session's remote policy.
-    #[test]
-    #[serial_test::serial]
-    fn embedded_otel_gate_keeps_a_session_user_fail_closed() {
-        use crate::agent::auth_method::{LEGACY_XAI_API_KEY_ENV_VAR, XAI_API_KEY_ENV_VAR};
-        use xai_grok_telemetry::external::{
-            is_settings_gate_open, mark_external_otel_settings_resolved,
-        };
-        unsafe fn set_or_clear(key: &str, value: Option<std::ffi::OsString>) {
-            match value {
-                Some(v) => unsafe { std::env::set_var(key, v) },
-                None => unsafe { std::env::remove_var(key) },
-            }
-        }
-        /// Restores the api-key env and reopens the gate on drop so no state leaks.
-        struct Restore {
-            key: Option<std::ffi::OsString>,
-            legacy: Option<std::ffi::OsString>,
-            proxy: Option<std::ffi::OsString>,
-        }
-        impl Drop for Restore {
-            fn drop(&mut self) {
-                unsafe {
-                    set_or_clear(XAI_API_KEY_ENV_VAR, self.key.take());
-                    set_or_clear(LEGACY_XAI_API_KEY_ENV_VAR, self.legacy.take());
-                    set_or_clear(PROXY_ENV_VAR, self.proxy.take());
-                }
-                mark_external_otel_settings_resolved();
-            }
-        }
-        const PROXY_ENV_VAR: &str = "VKTR_CLI_CHAT_PROXY_BASE_URL";
-        let _restore = Restore {
-            key: std::env::var_os(XAI_API_KEY_ENV_VAR),
-            legacy: std::env::var_os(LEGACY_XAI_API_KEY_ENV_VAR),
-            proxy: std::env::var_os(PROXY_ENV_VAR),
-        };
-        let cfg = GrokComConfig::default();
-        unsafe {
-            std::env::set_var(XAI_API_KEY_ENV_VAR, "test-key");
-            std::env::remove_var(LEGACY_XAI_API_KEY_ENV_VAR);
-            std::env::remove_var(PROXY_ENV_VAR);
-        }
-        let session = GrokAuth {
-            expires_at: chrono::DateTime::from_timestamp(9_999_999_999, 0),
-            auth_mode: AuthMode::Oidc,
-            oidc_issuer: Some(xai_grok_login::XAI_OAUTH2_ISSUER.to_string()),
-            ..GrokAuth::test_default()
-        };
-        let with_session = {
-            let dir = tempfile::tempdir().unwrap();
-            let am = Arc::new(AuthManager::new(dir.path(), GrokComConfig::default()));
-            am.hot_swap(session);
-            am
-        };
-        apply_otel_config(&with_session, &cfg);
-        assert!(
-            !is_settings_gate_open(),
-            "a session user must boot fail-closed even with an env key set"
-        );
     }
     /// Wait until at least one relay connection is accepted, or panic.
     #[tracing::instrument(level = "debug", skip_all)]

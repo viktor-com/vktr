@@ -1,0 +1,313 @@
+# domain
+- vktr is a coding TUI forked from Grok Build (Apache-2.0) and rebranded; upstream origin is recorded in NOTICE @implemented
+- Viktor is a first-class provider, reached through the Viktor compat API, not an OpenAI-compat hack @implemented
+- the Viktor compat API exposes chat completions, responses (with previous_response_id continuation), Anthropic messages, and a single model id viktor @implemented
+- a generic OpenAI-compatible provider is kept so vktr runs against local backends such as Harbor @implemented
+- the binary is named vktr, user config lives in ~/.vktr, and sessions live under a workspace-specific directory @implemented
+- no code path reached in normal use contacts xAI services: no login, telemetry, self-update, managed config, vendor changelog or x-grok request headers; unreachable OAuth and device-login code still names x.ai hosts @implemented
+- label: LICENSE is the upstream Apache-2.0 text
+  command: grep -q "Apache License" LICENSE && grep -q "SpaceXAI" LICENSE
+  tags: [implemented, ci]
+- label: NOTICE names the upstream project and states the work is modified
+  command: grep -q "grok-build" NOTICE && grep -qi "modified" NOTICE
+  tags: [implemented, ci]
+- label: upstream is tracked by merge: HEAD descends from vendor/grok-build-rebranded (upstream snapshots with scripts/rebrand.pl applied, minus scripts/rebrand.exclude), SOURCE_REV and NOTICE name its Source-Revision, and the rebrand changes no file HEAD keeps as upstream text; the update procedure is .agents/skills/update-upstream
+  command: python3 scripts/upstream.py verify
+  tags: [implemented]
+- label: THIRD-PARTY-NOTICES is retained
+  command: test -s THIRD-PARTY-NOTICES
+  tags: [implemented, ci]
+- label: THIRD-PARTY-NOTICES has an entry for every external crate linked into the shipped binary
+  command: python3 scripts/update-third-party-notices.py --check
+  tags: [implemented]
+- label: NOTICE names viktor.com as the copyright holder of the modifications, and SECURITY.md routes reports to security@viktor.com
+  command: grep -q "viktor.com" NOTICE && grep -q "security@viktor.com" SECURITY.md && ! grep -qi "x.ai\b" CONTRIBUTING.md
+  tags: [implemented, ci]
+- label: tracked docs and recordings name no internal hosts, home paths, private backends or people; the patterns live in an untracked .release-denylist on maintainer machines, so the check passes trivially without it
+  command: [ ! -f .release-denylist ] || ! git grep -qiEf .release-denylist -- docs README.md CHANGELOG.md
+  tags: [implemented, ci]
+- label: a release binary names no build machine: scripts/dist.sh remaps the builder's home, cargo home and checkout paths and refuses a binary that still contains the builder's home, and built-in workflows are listed without a source path
+  command: grep -q -- '--remap-path-prefix=$HOME=/home' scripts/dist.sh && grep -q 'still contains build paths' scripts/dist.sh && ! grep -q 'CARGO_MANIFEST_DIR' crates/codegen/xai-grok-shell/src/session/workflow/registry.rs
+  tags: [implemented, ci]
+- label: vktr update never contacts upstream's release channel (whose x.ai and GCS hosts serve Grok Build; the old code would have installed Grok over vktr and reported a Grok version as a vktr update): it prints how to update by rerunning the installer, and the update crate's host list is empty unless a loopback override is set; vktr trace always exports locally, since upstream uploaded traces to xAI
+  command: grep -q 'does not update itself' crates/codegen/xai-grok-pager-bin/src/main.rs && grep -q 'Vec::new()' crates/codegen/xai-grok-update/src/version.rs && grep -q 'always exported locally' crates/codegen/xai-grok-pager/src/trace_cmd.rs
+  tags: [implemented, ci]
+
+# m1 boot and chat
+- label: the release binary is called vktr
+  command: grep -q '^name = "vktr"' crates/codegen/xai-grok-pager-bin/Cargo.toml && grep -q 'name = "vktr",' crates/codegen/xai-grok-pager/src/app/cli.rs
+  tags: [implemented, ci]
+- label: the home directory is ~/.vktr, overridable with VKTR_HOME, and no source file names ~/.grok or GROK_ env vars
+  command: grep -q '"VKTR_HOME"' crates/codegen/xai-dirs/src/lib.rs && grep -q 'join(".vktr")' crates/codegen/xai-dirs/src/lib.rs && ! grep -rqE 'GROK_[A-Z]|"\.grok"' crates --include=*.rs --exclude=launch.rs
+  tags: [implemented, ci]
+- label: the built-in model catalog holds exactly one model, viktor, on the responses backend, keyed by VIKTOR_API_KEY
+  command: python3 -c "import json;d=json.load(open('crates/codegen/xai-grok-models/default_models.json'));m=d['models'];assert d['default']=='viktor' and len(m)==1 and m[0]['api_backend']=='responses' and m[0]['env_key'][0]=='VIKTOR_API_KEY' and m[0]['max_retries']==2"
+  tags: [implemented, ci]
+- label: the Viktor base URL defaults to https://api.viktor.com/api/compat/v1 and VIKTOR_BASE_URL overrides it
+  command: grep -q 'VIKTOR_BASE_URL_DEFAULT: &str = "https://api.viktor.com/api/compat/v1"' crates/codegen/xai-grok-shell/src/agent/config.rs && grep -q 'env_string("VIKTOR_BASE_URL")' crates/codegen/xai-grok-shell/src/agent/config.rs
+  tags: [implemented, ci]
+- label: with only VIKTOR_API_KEY and VIKTOR_BASE_URL set, vktr -p chats over responses, chat completions and messages (VIKTOR_API_BACKEND or [model.viktor] api_backend), needs no login, and every failed-run shape (HTTP 502 run_failed, in-stream error frame, response.failed, Anthropic error event, empty stream, 401, 403 missing scope) exits non-zero naming the server's message
+  command: test -x scripts/smoke-m1.sh && bash -n scripts/smoke-m1.sh && grep -qF 'scripts/smoke-m1.sh' scripts/test.sh
+  tags: [implemented]
+- label: a Viktor run_failed error and a terminal response.failed are never retried, by the sampler or by the turn loop
+  command: grep -q 'is_viktor_run_failed()' crates/codegen/xai-grok-sampling-types/src/error.rs && grep -q 'VIKTOR_RUN_FAILED_ERROR_CODE' crates/codegen/xai-grok-shell/src/session/acp_session_impl/sampler_turn.rs && grep -q 'should_retry: Some(false)' crates/codegen/xai-grok-sampler/src/stream/responses.rs
+  tags: [implemented, ci]
+- label: vktr login --api-key verifies the key against the Viktor models endpoint and saves it as [model.viktor] api_key with owner-only permissions; browser and device login are refused
+  command: grep -q 'pub async fn verify_api_key' crates/codegen/xai-grok-pager/src/viktor_key.rs && grep -q 'mode(0o600)' crates/codegen/xai-grok-pager/src/viktor_key.rs && grep -q 'viktor_key::' crates/codegen/xai-grok-pager-bin/src/viktor_login.rs
+  tags: [implemented, ci]
+- label: vktr never self-updates and managed-config fetch is off by default
+  command: grep -A3 'fn should_check_for_updates' crates/codegen/xai-grok-pager-bin/src/main.rs | grep -q 'false' && grep -A8 'pub fn is_fetch_enabled' crates/codegen/xai-grok-shell/src/managed_config/store.rs | grep -q 'unwrap_or(false)'
+  tags: [implemented, ci]
+- the interactive TUI streams assistant text as it arrives and shows token usage; recorded in docs/recordings/m1-chat.cast @implemented
+- in the TUI a failed Viktor run shows the server's own error text immediately, and an empty reply shows as an "Empty response" error, never as a blank assistant message; recorded in docs/recordings/m1-run-failed.cast and m1-empty-reply.cast @implemented
+- a headless run connects only to the configured Viktor base URL (verified with strace: no DNS lookups, no x.ai hosts) @implemented
+- a remote /v1/models listing adds models but never replaces a built-in catalog entry; in custom endpoint mode (VKTR_MODELS_BASE_URL) the remote list stands alone @implemented
+- a custom [model.*] entry pointing at an OpenAI-compatible base_url still works @implemented
+- label: one user prompt makes exactly one inference request: LLM session titles, post-turn summaries, session recap and prompt suggestions are off by default because each would be a separate billed Viktor run (opt back in with VKTR_LLM_SESSION_TITLES, [features] turn_summary / session_recap, [ui] prompt_suggestions)
+  command: grep -q 'npost" -eq 1' scripts/smoke-m1.sh && grep -A6 'key: "turn_summary"' crates/codegen/xai-grok-config-types/src/registry.rs | grep -q 'default_enabled: false'
+  tags: [implemented]
+- label: vktr login without --api-key reads the key from stdin when it is piped, or prompts with terminal echo off, so the key never needs to be on a command line or in shell history; vktr logout removes the saved key and says when VIKTOR_API_KEY is still set
+  command: grep -q 'fn read_api_key_from_user' crates/codegen/xai-grok-pager-bin/src/viktor_login.rs && grep -q 'pub fn remove_saved_api_key' crates/codegen/xai-grok-pager/src/viktor_key.rs
+  tags: [implemented, ci]
+- label: a failed headless run prints its error once, as plain text (the agent protocol's JSON quoting is unwrapped), and exits 1; JSON output modes keep the raw error
+  command: grep -rqE --include=*.rs '(fn|mod) readable_error_tests' crates/codegen/xai-grok-pager && grep -q 'ErrorAlreadyReported' crates/codegen/xai-grok-pager-bin/src/main.rs
+  tags: [implemented, ci]
+- label: starting the TUI without a key (or /login) opens a sign-in screen that takes a pasted Viktor API key: it is verified with GET /models, saved owner-only like vktr login, and used at once through a process-wide signed-in key (not the environment); a rejected key shows Viktor's message and saves nothing; no browser, OIDC or xAI host is involved (upstream opened a browser login that could never succeed against Viktor)
+  command: grep -rqE --include=*.rs '(fn|mod) login_is_a_viktor_key_paste_box' crates/codegen/xai-grok-pager && grep -q 'set_signed_in_api_key' crates/codegen/xai-grok-login/src/auth_method.rs
+  tags: [implemented, ci]
+- label: for the built-in viktor model VIKTOR_API_KEY in the environment wins over the key saved by vktr login, in the TUI and -p as in acp, launch and doctor (upstream let the saved key win)
+  command: grep -rqE --include=*.rs '(fn|mod) own_credential' crates/codegen/xai-grok-shell
+  tags: [implemented, ci]
+
+# m2 tools approvals diffs
+- label: caller tools (read_file, run_terminal_command, search_replace, write) run locally and their results go back to the model on responses, chat completions and messages; without a grant, calls needing approval are denied, leave the disk untouched, name the blocked call, and exit non-zero; an --allow rule grants only its own tool family
+  command: test -x scripts/smoke-m2.sh && bash -n scripts/smoke-m2.sh && grep -qF 'scripts/smoke-m2.sh' scripts/test.sh
+  tags: [implemented]
+- label: headless mode rejects a tool call it cannot ask about and reports it, instead of cancelling silently with exit 0
+  command: grep -q 'HEADLESS_TOOL_DENIED' crates/codegen/xai-grok-pager/src/headless.rs && grep -q 'headless mode cannot ask for approval' crates/codegen/xai-grok-pager/src/headless.rs
+  tags: [implemented, ci]
+- label: tools that only work against xAI's backend (web_search, image_gen, image_edit, video generation, send_feedback) are not advertised unless VKTR_XAI_BACKED_TOOLS=1
+  command: test "$(grep -c 'xai_backed_tools_enabled()' crates/codegen/xai-grok-agent/src/builder.rs)" -ge 6
+  tags: [implemented, ci]
+- in the TUI an edit shows its diff and asks for approval with four choices (always-approve, allow edits this session, yes once, reject with feedback); approving applies the edit and the turn continues; recorded in docs/recordings/m2-edit-approval.cast @implemented
+- a plain workspace command runs inside the OS sandbox without a prompt, while redirects, edits and writes need approval (upstream's workspace-write model, kept) @implemented
+- remote Viktor tools that run server-side are shown in the transcript as remote activity with their name @draft
+- the Viktor compat API does not put server-side tool names on the wire (only a keep-alive comment), so the previous fact is blocked on a backend change @implemented
+- label: the main agent's toolset is lean by default: workflows and subagents are off at their source and the scheduler, monitor and goal tools are denied, so a first request is 34 KB instead of 50 KB (14 tools instead of 20; live, 35K instead of 40K input tokens and steadier latency); VKTR_FULL_TOOLSET=1 restores upstream's set, VKTR_WORKFLOWS=1 / VKTR_SUBAGENTS=1 (or their config sections) enable one family, and an explicit --tools list naming a denied tool keeps it
+  command: grep -rqE --include=*.rs '(fn|mod) the_lean_toolset_denies' crates/codegen/xai-grok-shell && grep -rqE --include=*.rs '(fn|mod) subagents_config_default_follows' crates/codegen/xai-grok-shell && grep -rqE --include=*.rs '(fn|mod) background_workflows_default_follows' crates/codegen/xai-grok-shell
+  tags: [implemented, ci]
+
+# m3 sessions resume slash commands
+- label: sessions persist under VKTR_HOME/sessions/<encoded cwd>/; --continue and --resume <id> reload them in a new process; on the Viktor responses backend a session keeps one durable Viktor thread by sending previous_response_id with only the new items (tool results or the next user message), including across restarts; a history that diverged replays in full; a thread the server no longer has is replayed in a new thread without a user-visible error; VKTR_RESPONSES_CONTINUATION=0 restores stateless replay; images given as content blocks reach the wire as image content on all three backends
+  command: test -x scripts/smoke-m3.sh && bash -n scripts/smoke-m3.sh && grep -qF 'scripts/smoke-m3.sh' scripts/test.sh
+  tags: [implemented]
+- label: continuation is planned in the sampler from a fingerprint of the input already sent, so correctness never depends on the cache
+  command: grep -q 'fn plan' crates/codegen/xai-grok-sampler/src/viktor_continuation.rs && grep -q 'viktor_continuation::plan' crates/codegen/xai-grok-sampler/src/client.rs
+  tags: [implemented, ci]
+- the TUI offers slash commands including /help, /model, /new, /compact, /resume, /rewind, /theme, /settings, /multiline and /export; recorded in docs/recordings/m3-slash-and-resume.cast @implemented
+- multi-line input works with Shift+Enter or Alt+Enter, and /multiline flips Enter to newline @implemented
+- images can be pasted (Ctrl+V, Alt+V on Windows) or dragged into the prompt; images under 512 pixels are dropped with a notice to the model @implemented
+- chat completions and messages backends stay stateless (full history each request), because only the Viktor responses surface has previous_response_id @implemented
+- label: a turn sent right after a cancelled one meets Viktor's HTTP 409 conversation_busy for about 15 s; the sampler retries it with its normal backoff instead of failing the turn (verified live 2026-09-23: kill a long turn at 4 s, --continue answers after 14 s), while any other 409 stays fatal
+  command: grep -rqE --include=*.rs '(fn|mod) a_busy_viktor_thread_is_retried' crates/codegen/xai-grok-sampling-types
+  tags: [implemented, ci]
+- label: automatic compaction is skipped for the built-in viktor model on the Responses backend with continuation, because Viktor compacts its threads server-side and a client-side compaction would cost a billed run and replay into a fresh thread (losing Viktor's sandbox state); /compact still works, stateless protocols and VKTR_RESPONSES_CONTINUATION=0 compact as before, VKTR_VIKTOR_CLIENT_COMPACTION=1 restores it
+  command: grep -rqE --include=*.rs '(fn|mod) viktor_context_tests' crates/codegen/xai-grok-shell
+  tags: [implemented, ci]
+
+# m4 launch
+- label: vktr launch [--backend <svc|url>] [--model <m>] [--config] <tool> [args] finds a reachable OpenAI-compatible backend, discovers models from /v1/models (OpenAI data[] and Ollama models[] shapes, skipping embedding models), wires the model into claude, codex, copilot, grok, hermes, mi, opencode, pi, pool or vktr through env vars or the tool's documented config file, passes everything after the tool name through unchanged, and runs the tool from the invoking directory; --config prints the wiring with secrets masked and writes config files without starting the tool; --viktor points the tool at the Viktor compat API using VIKTOR_API_KEY or the key saved by vktr login; when harbor is on PATH, local launches are delegated to harbor launch unchanged
+  command: test -x scripts/smoke-m4.sh && bash -n scripts/smoke-m4.sh && grep -qF 'scripts/smoke-m4.sh' scripts/test.sh
+  tags: [implemented]
+- label: launch logic has unit tests for model discovery, URL forms, the codex and claude plans, pi session dirs and secret masking
+  command: grep -q 'fn model_discovery_reads_openai_and_ollama_shapes_and_skips_embeddings' crates/codegen/xai-grok-pager-bin/src/launch.rs && grep -q 'Launch(LaunchArgs)' crates/codegen/xai-grok-pager/src/app/cli.rs
+  tags: [implemented, ci]
+- vktr launch pi registers the provider in pi's models.json and selects it with --provider and --model, so pi's default provider in settings.json is never rewritten (Harbor rewrites it) @implemented
+- vktr launch pi uses a workspace-specific --session-dir unless the user passed a pi session flag @implemented
+- vktr launch --viktor claude routes every Claude Code model slot to the viktor model and warns that each request becomes a Viktor agent run @implemented
+- claude is refused for backends that do not speak the Anthropic Messages API (anything but ollama and Viktor) with a pointer to the OpenAI-compatible tools @implemented
+- without Harbor, vktr launch cannot start a backend; it lists every endpoint it probed and says how to start one or install Harbor @implemented
+- vktr launch has been exercised against a real Harbor install and a real local backend (2026-09-23, Harbor 0.5.13, Ollama with qwen2.5:0.5b): native wiring answered through vktr's generic provider, and a harbor-delegated opencode run reached the same model @implemented
+
+# m5 polish
+- label: --json is shorthand for --output-format json and prints one JSON object with the reply, stop reason, session id and usage
+  command: grep -q 'long = "json", conflicts_with = "output_format"' crates/codegen/xai-grok-pager/src/app/cli.rs && grep -q 'if args.json' crates/codegen/xai-grok-pager-bin/src/main.rs
+  tags: [implemented, ci]
+- label: requests carry no xAI proxy protocol headers (x-grok-*, x-xai-*, x-authenticateresponse, x-compaction-at) unless VKTR_XAI_PROTOCOL_HEADERS=1, and the user agent product is vktr
+  command: grep -q 'fn strip_xai_protocol_headers' crates/codegen/xai-grok-sampler/src/client.rs && test "$(grep -c 'strip_xai_protocol_headers(' crates/codegen/xai-grok-sampler/src/client.rs)" -ge 3 && grep -q 'const AGENT_PRODUCT: &str = "vktr"' crates/codegen/xai-grok-sampler/src/client.rs
+  tags: [implemented, ci]
+- label: the welcome screen shows a vktr logo and the changelog compiled in from CHANGELOG.md; nothing is fetched from a vendor CDN
+  command: grep -q 'BUNDLED_CHANGELOG' crates/codegen/xai-grok-shell-base/src/util/changelog.rs && test -s CHANGELOG.md && test -s crates/codegen/xai-grok-pager/assets/logo/wordmark57.txt
+  tags: [implemented, ci]
+- label: the logo is the Viktor wordmark from the Viktor decks, rasterized to 57x14 and 46x11 pixel grids (1.2x shorter than the outline, for the terminal cell's aspect) and drawn with half blocks; lit pixels dither between two brand tones on a drifting Bayer ramp and a white glint sweeps the mark twice, then it holds still at about 11 s and an idle welcome screen stops ticking; the hero box shows the 57-column mark from 120 columns and the 46-column one from 100
+  command: test -f crates/codegen/xai-grok-pager/src/views/welcome/logo.rs -o -f crates/codegen/xai-grok-pager/src/views/welcome/logo/mod.rs && grep -rqE --include=*.rs '(fn|mod) welcome_parks_once_the_wordmark_settles' crates/codegen/xai-grok-pager
+  tags: [implemented, ci]
+- label: vktr Night and vktr Day take the viktor.com/brand palette (Peach FFBD9E, Lilac 947FFF, Violet 6748FD, Navy 150079, soft-black 1B182A): violet-tinted grounds, lilac/violet for Viktor's replies and running work, peach (terracotta on Day) for plan mode, the model name, paths, fuzzy matches, H1 and inline code, and a white glint on the wordmark; error, success and diff colors stay conventional
+  command: grep -q 'rgb(148, 127, 255); // #947FFF' crates/codegen/xai-grok-pager-render/src/theme/groknight.rs && grep -q 'rgb(103, 72, 253); // #6748FD' crates/codegen/xai-grok-pager-render/src/theme/grokday.rs && grep -q 'pub brand_glint: Color' crates/codegen/xai-grok-pager-render/src/theme/tokyonight.rs
+  tags: [implemented, ci]
+- label: no help screen names grok or x.ai: scripts/check-help-text.sh walks vktr --help and every subcommand's help one level deep; the upstream-only xAI relay flags and the xAI managed-config setup command are hidden, and --oauth / --device-auth are hidden since both are refused
+  command: bash -n scripts/check-help-text.sh && grep -qF 'scripts/check-help-text.sh' scripts/test.sh
+  tags: [implemented]
+- six themes plus auto are selectable with /theme or [ui] theme; the defaults are called vktr Night and vktr Day and accept vktr-night, vktr-day, dark, light (the old groknight and grokday names still parse) @implemented
+- configuration comes from ~/.vktr/config.toml plus VKTR_* and VIKTOR_* environment variables; project overrides live in .vktr/config.toml @implemented
+- the TUI works inside tmux and inside Zellij (checked with Zellij 0.45.1: prompt sent, reply streamed) @implemented
+- an interactive session connects to the configured model endpoint and, via git, to plugin marketplaces the user has configured (including ones imported from ~/.claude); traced with strace, no x.ai host is contacted @implemented
+- label: /feedback keeps the note in the session's feedback.jsonl and says so; vktr has no feedback service, so neither the notice nor the welcome screen promises that anyone will read it
+  command: grep -q 'vktr sends it nowhere' crates/codegen/xai-grok-pager/src/app/dispatch/notes.rs && ! grep -q 'give feedback with /feedback' crates/codegen/xai-grok-pager/src/views/welcome/hero_box.rs
+  tags: [implemented, ci]
+- label: vktr doctor ends with a Viktor section: endpoint and its source, the key's source shown as zt_live_sk_… plus its last four characters, a live key check with latency, protocol and continuation, toolset mode, and saved ACP sessions
+  command: grep -rqE --include=*.rs '(fn|mod) a_masked_key_shows_only' crates/codegen/xai-grok-pager-bin
+  tags: [implemented, ci]
+- label: vktr -p reads piped input: with a prompt it is appended as a <stdin> block, a bare -p takes it as the prompt; only a pipe or regular file is read, a pipe silent for 1 s is ignored so an inherited idle stdin cannot hang a script, and input over 512 KiB is cut with a note
+  command: grep -rqE --include=*.rs '(fn|mod) piped_stdin_tests' crates/codegen/xai-grok-pager
+  tags: [implemented, ci]
+- label: /privacy states where vktr sends data (only the configured model endpoint; nothing to xAI: no telemetry, training opt-in, self-update, sharing or trace upload) instead of opening upstream's SpaceXAI training opt-in, whose settings row vktr no longer shows; the eight upstream e2e tests of that row were removed
+  command: grep -rqE --include=*.rs '(fn|mod) privacy_states_where_data_goes' crates/codegen/xai-grok-pager && grep -rqE --include=*.rs '(fn|mod) the_xai_training_opt_in_is_not_a_vktr_setting' crates/codegen/xai-grok-pager
+  tags: [implemented, ci]
+- label: requests identify as vktr/<version> (<os>; <arch>): the TUI's and headless mode's internal client names (grok-pager, grok-shell) no longer lead the User-Agent
+  command: grep -rqE --include=*.rs '(fn|mod) vktrs_own_front_ends_are_just_vktr' crates/codegen/xai-grok-sampler && grep -rqE --include=*.rs '(fn|mod) vktrs_own_tui_is_just_vktr' crates/codegen/xai-grok-http
+  tags: [implemented, ci]
+
+# acp
+
+- label: vktr acp serves Viktor to ACP editors over stdio and keeps wire parity with the TypeScript viktor-acp agent for a chat-only client: initialize (v1, image and embeddedContext prompt capabilities, the viktor-api-key auth method), authenticate against the models endpoint, session/new, a streaming session/prompt, session/cancel, one ACP session = one Viktor thread through previous_response_id, text/image/resource-link/embedded-text prompt content, no tools on the wire, and a failed run returned as a JSON-RPC error carrying Viktor's own message, error class and request id
+  command: f=crates/codegen/vktr-acp/tests/acp_protocol.rs; for t in completes_the_acp_v1_handshake_and_advertises_the_api_key_auth_method authenticate_verifies_the_key_against_the_models_endpoint streams_viktors_reply_as_agent_message_chunks_and_ends_the_turn maps_a_session_to_one_viktor_thread_and_continues_it_with_previous_response_id a_cancelled_turn_stops_with_the_cancelled_stop_reason; do grep -q "fn $t" $f || exit 1; done
+  tags: [implemented]
+- label: the shipped binary serves ACP end to end: scripts/smoke-acp.py drives `vktr acp` over stdio against the mock Viktor through scripts/acp_client.py (a real editor half: fs, terminals, permission answers), checking the handshake, a streamed reply, one editor session per Viktor thread, a read and a command round trip, a rejected write that leaves the disk alone, session/list and session/load in a restarted agent that continues the same thread, and that the API key never reaches stderr
+  command: test -x scripts/smoke-acp.py && python3 -c "import ast,sys; ast.parse(open(sys.argv[1]).read())" scripts/smoke-acp.py && grep -qF 'scripts/smoke-acp.py' scripts/test.sh
+  tags: [implemented]
+- label: the acp tests drive a real ACP client against a mock Viktor compat API, as the TypeScript suite does, rather than calling the agent's methods directly
+  command: grep -q 'ClientSideConnection::new' crates/codegen/vktr-acp/tests/acp_protocol.rs && grep -q 'impl acp::Client for TestClient' crates/codegen/vktr-acp/tests/acp_protocol.rs
+  tags: [implemented, ci]
+- label: vktr acp takes its key from VIKTOR_API_KEY or the vktr login store (shared with vktr launch, never duplicated), and is dispatched before any other start-up work so stdout carries only the ACP wire
+  command: grep -q 'viktor_login::resolve_api_key' crates/codegen/xai-grok-pager-bin/src/acp_command.rs && grep -q 'Some(Command::Acp(acp_args)) = &args.command' crates/codegen/xai-grok-pager-bin/src/main.rs && grep -q 'crate::viktor_login::resolve_api_key' crates/codegen/xai-grok-pager-bin/src/launch.rs
+  tags: [implemented, ci]
+- label: Viktor emits "[Stream error: ...]" as output text just before it fails a run; vktr acp drops that text so a failed run never reaches the editor as assistant content
+  command: grep -q 'STREAM_ERROR_PREFIX' crates/codegen/vktr-acp/src/client.rs && grep -q 'without_leaking_the_stream_error_text' crates/codegen/vktr-acp/tests/acp_protocol.rs
+  tags: [implemented, ci]
+- label: vktr acp is documented as the canonical Viktor ACP agent, and the TypeScript viktor-acp package is recorded as deprecated
+  command: grep -q 'canonical Viktor ACP agent' docs/acp.md && grep -qi 'deprecated' docs/acp.md
+  tags: [implemented, ci]
+- vktr acp is not vktr agent stdio: agent stdio serves vktr's own local coding agent over ACP, while acp serves Viktor working in its cloud sandbox, which reaches the editor's workspace only through the fs and terminal capabilities the editor offers @implemented
+- the TypeScript viktor-acp package still exists in viktor-integrations/acp and still works; it is frozen, not removed @implemented
+
+- label: the fork does not vendor xAI's internal operator docs (crates/codegen/xai-grok-pager/docs/internal/), so the upstream test that asserted every registered feature appears in those two tables is removed rather than left un-compilable; `cargo test --workspace` builds
+  command: test ! -e crates/codegen/xai-grok-pager/tests/registered_features_are_documented.rs && test ! -d crates/codegen/xai-grok-pager/docs/internal
+  tags: [implemented, ci]
+- label: when the editor offers fs or terminal capabilities, vktr acp gives Viktor matching caller tools (editor_read_file, editor_write_file, editor_run_command, each only if offered; VKTR_ACP_EDITOR_TOOLS=0 turns them off); Viktor's call comes back on the Responses stream, runs through the editor's fs/read_text_file, fs/write_text_file or terminal/create, is shown as tool_call updates (a diff for writes, the live terminal for commands), and its result resumes the same Viktor thread as a function_call_output
+  command: grep -rqE --include=*.rs '(fn|mod) a_chat_only_client_gets_no_tools' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) a_read_runs_through_the_editor' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) a_write_asks_the_user_with_its_diff' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) a_rejected_write_leaves' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) a_command_runs_in_an_editor_terminal' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) an_editor_that_cannot_ask' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) always_allow_is_remembered' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) a_call_to_a_tool_the_editor_does_not_offer' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) cancelling_at_the_permission_prompt' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) the_tools_can_be_turned_off' crates/codegen/vktr-acp
+  tags: [implemented, ci]
+- label: writes and commands ask session/request_permission first (allow once, always allow in this session, reject), with the write's diff in the prompt; a rejection, a cancelled prompt or an editor that cannot ask never runs the call, and Viktor is told it was rejected
+  command: grep -rqE --include=*.rs '(fn|mod) a_write_asks_the_user' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) a_rejected_write' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) an_editor_that_cannot_ask' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) always_allow' crates/codegen/vktr-acp
+  tags: [implemented, ci]
+- label: vktr acp keeps each session in $VKTR_HOME/acp/sessions/<id>.json (owner-only; thread id, workspace, title, capped transcript), so a restarted agent serves session/list, session/load (replaying the transcript) and session/resume, and continues the same Viktor thread
+  command: grep -rqE --include=*.rs '(fn|mod) a_restarted_agent_loads_a_session' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) resume_restores_the_thread' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) a_saved_session_loads_back' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) an_id_that_is_not_a_plain_file_name' crates/codegen/vktr-acp
+  tags: [implemented, ci]
+- label: after a cancelled turn Viktor answers the thread with HTTP 409 conversation_busy for about 15 s while it stops the run; vktr acp waits that out (up to 120 s, cancellable, with a thought chunk saying why) instead of failing the next prompt, and answers any tool call the cancelled turn left open before the next user message
+  command: grep -rqE --include=*.rs '(fn|mod) a_prompt_right_after_a_cancel_waits' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) cancelling_at_the_permission_prompt' crates/codegen/vktr-acp
+  tags: [implemented, ci]
+- label: a tool output is owed to Viktor from the moment it exists until Viktor accepts a request carrying it (kept in the session file), so a failed request, a cancel, the 64-round cap or an agent restart never strands the thread with an unanswered call; a prompt that supersedes a running one cancels it and waits for it to finish before touching the thread
+  command: grep -rqE --include=*.rs '(fn|mod) tool_outputs_survive_a_failed_request' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) owed_tool_outputs_are_stored' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) a_prompt_that_supersedes_a_running_one' crates/codegen/vktr-acp
+  tags: [implemented, ci]
+- label: editor tool paths are resolved against the workspace root and collapsed lexically (. and ..) before use, so the user approves the path actually touched; reads inside the workspace run without asking, reads outside it ask first ("Read <path> (outside the workspace)")
+  command: grep -rqE --include=*.rs '(fn|mod) dot_dot_is_collapsed' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) a_read_outside_the_workspace_asks_first' crates/codegen/vktr-acp
+  tags: [implemented, ci]
+- label: the MCP servers an editor lists in session/new (stdio and HTTP) are connected on the user's machine and their tools offered to Viktor as mcp__<server>__<tool> (valid, unique function names, combinator schemas flattened); each call asks session/request_permission, runs here, and its text result (or MCP error) resumes the same Viktor thread; stdio servers run in the workspace inside a ProcessScope and die with the session; a server that fails is named in a thought chunk; VKTR_ACP_MCP=0 turns this off; verified live 2026-09-23 (a random code only the local server knew came back through Viktor)
+  command: grep -rqE --include=*.rs '(fn|mod) an_editor_mcp_server_is_offered' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) a_rejected_or_failing_mcp_call' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) an_mcp_server_that_cannot_start' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) mcp_servers_can_be_turned_off' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) names_are_valid_function_names' crates/codegen/vktr-acp && grep -rqE --include=*.rs '(fn|mod) a_combinator_schema' crates/codegen/vktr-acp
+  tags: [implemented, ci]
+- label: vktr acp --print-config zed|jetbrains prints the editor's agent_servers snippet with the path of the vktr on PATH (a stable link) or of the running binary, without touching editor files
+  command: grep -q 'print-config' crates/codegen/xai-grok-pager/src/app/cli.rs && grep -q 'agent_servers' crates/codegen/xai-grok-pager-bin/src/acp_command.rs
+  tags: [implemented, ci]
+
+# m6 packaging
+- label: scripts/dist.sh builds with the vktr-dist profile (thin LTO, stripped, no debug info, no incremental state) and produces dist/vktr-<version>-<target>.tar.gz with the binary, LICENSE, NOTICE, THIRD-PARTY-NOTICES, README, CHANGELOG and a .sha256
+  command: grep -q '^\[profile.vktr-dist\]' Cargo.toml && grep -q 'cp LICENSE NOTICE THIRD-PARTY-NOTICES' scripts/dist.sh && grep -q 'sha256sum' scripts/dist.sh
+  tags: [implemented, ci]
+- label: install.sh installs from a release base URL (curl | sh), a tarball, a URL or from source into ~/.vktr/bin with a link in ~/.local/bin, needs no root, verifies the .sha256 and refuses a release without one, and keeps the license files next to the binary
+  command: sh -n install.sh && grep -q 'refusing to install an unverified release' install.sh && grep -q 'checksum mismatch' install.sh && grep -q 'for f in LICENSE NOTICE THIRD-PARTY-NOTICES' install.sh
+  tags: [implemented, ci]
+- the distribution binary passes all four smoke matrices (76 cases), the ACP smoke and the help-text sweep, and install.sh was exercised with --tarball, with curl | sh against a local release server, and with a tampered tarball that is rejected on its checksum with nothing installed (re-verified 2026-09-23 on the glibc-2.28 build) @implemented
+- label: install.sh installs from the GitHub repo it defaults to (viktor-com/vktr), fetching assets unauthenticated when the repo is public and through `gh release download` when it is private; VKTR_RELEASE_REPO and VKTR_RELEASE_BASE_URL redirect it
+  command: grep -q 'REPO="${VKTR_RELEASE_REPO:-viktor-com/vktr}"' install.sh && grep -q 'gh release download' install.sh && grep -q 'public_asset' install.sh
+  tags: [implemented, ci]
+- the public release repository is viktor-com/vktr; its name appears only in install.sh, the README and the getting-started guide @implemented
+- release builds exist for linux x86_64 and linux aarch64; macOS needs a real Mac (or an Apple SDK), because vktr links the CoreFoundation, CoreGraphics, IOKit and AppKit frameworks and aws-lc-sys needs CoreServices headers, none of which cargo-zigbuild or cross can supply from Linux @implemented
+- an aarch64-apple-darwin build on this Linux host fails twice over: aws-lc-sys cannot find CoreServices/CoreServices.h, and the linker reports "unable to find framework 'CoreFoundation'. searched paths: none"; a minimal crate that links only libSystem does cross-compile, so the gap is the Apple SDK, not the toolchain @implemented
+- linux aarch64 is built on the x86_64 host with cargo-zigbuild (VKTR_DIST_TARGET=aarch64-unknown-linux-gnu scripts/dist.sh, 9m19s here), with the repo's neoverse-v2 tuning replaced by generic aarch64; verified 2026-09-23 under qemu-aarch64 on an arm64 Debian 10 rootfs: the M1 smoke matrix 17/17, the ACP smoke, and a live Viktor prompt @implemented
+- label: scripts/dist.sh builds linux binaries with cargo-zigbuild against glibc 2.28 and fails if the binary needs anything newer, so vktr runs on RHEL 8, Debian 10, Ubuntu 20.04 and newer; the earlier host-built binary needed glibc 2.39 and did not start on Debian 10, while the 2.28 build answered a live Viktor prompt there (2026-09-23)
+  command: grep -q 'VKTR_DIST_GLIBC:-2.28' scripts/dist.sh && grep -q 'above the $GLIBC floor' scripts/dist.sh
+  tags: [implemented, ci]
+- label: scripts/dist.sh refuses a working tree with uncommitted changes (VKTR_DIST_ALLOW_DIRTY=1 overrides) and a binary not stamped with the current HEAD, so `vktr --version` in a tarball always names the published commit it was built from (the first 1.0.38-vktr.2 tarballs named a pre-amend commit that never reached the repo)
+  command: grep -q 'VKTR_DIST_ALLOW_DIRTY' scripts/dist.sh && grep -q 'it was built from another commit' scripts/dist.sh
+  tags: [implemented, ci]
+- label: on a public repo whose release has no asset for the platform, install.sh says there is no prebuilt vktr and points to --from-source instead of asking for the GitHub CLI
+  command: grep -q 'has no prebuilt vktr for' install.sh
+  tags: [implemented, ci]
+- label: release binaries are assembled on GitHub, not on a developer machine: .github/workflows/release.yml builds Linux x86_64/aarch64 and macOS aarch64 tarballs (no Intel Mac build) with scripts/dist.sh on a v* tag push (checking the tag matches the crate version), stages them as a draft release whose asset list, checksums, tarball contents and version stamps it checks, installs the draft with install.sh on each target OS (and Rocky Linux 8) and runs scripts/smoke-release.sh there, and publishes only when every OS passed; a manual run does the same as a dry run that publishes a dryrun-<run id> prerelease and deletes it and its tag again
+  command: grep -q 'tags: \["v\*"\]' .github/workflows/release.yml && grep -q 'run: scripts/dist.sh' .github/workflows/release.yml && grep -q 'does not match crate version' .github/workflows/release.yml && grep -q 'aarch64-apple-darwin' .github/workflows/release.yml && ! grep -q 'x86_64-apple-darwin' .github/workflows/release.yml && grep -q 'scripts/smoke-release.sh' .github/workflows/release.yml && grep -q 'rockylinux' .github/workflows/release.yml && grep -q 'dryrun-' .github/workflows/release.yml && grep -q 'gh release delete' .github/workflows/release.yml && grep -q 'needs.verify.result' .github/workflows/release.yml
+- label: scripts/dist.sh refuses a linux binary that links anything beyond glibc and a macOS binary that needs a newer macOS than VKTR_DIST_MACOS (11.0) or links outside the system libraries, and ad-hoc signs the macOS binary; bin/protoc pins protoc 29.3 for macOS x86_64 as well
+  command: grep -q 'links libraries outside glibc' scripts/dist.sh && grep -q 'VKTR_DIST_MACOS:-11.0' scripts/dist.sh && grep -q 'codesign' scripts/dist.sh && grep -q 'protoc-29.3-osx-x86_64.zip' bin/protoc
+- label: the smoke scripts wait for the mock Viktor with a deadline (scripts/wait-for-mock.sh, VKTR_MOCK_WAIT, default 60 s) and stop with the cause when it never answers, instead of a 5 s best-effort wait that let a slow macOS runner fail the first ACP prompts with "Could not reach Viktor" (2026-10-01)
+  command: test -x scripts/wait-for-mock.sh && grep -q 'VKTR_MOCK_WAIT' scripts/smoke-acp.py && ! grep -q 'seq 1 50' scripts/smoke-m1.sh scripts/smoke-m2.sh scripts/smoke-m3.sh scripts/smoke-m4.sh scripts/record-tui.sh
+  tags: [implemented, ci]
+- label: scripts/smoke-release.sh runs every keyless release check (version stamp, help, help-text sweep, M1-M4 smoke matrices, ACP) against one binary and passes on Rocky Linux 8 (glibc 2.28) with the CI-built x86_64 binary (2026-09-28)
+  command: bash -n scripts/smoke-release.sh && grep -q 'smoke-m4.sh' scripts/smoke-release.sh && grep -q 'smoke-acp.py' scripts/smoke-release.sh
+  tags: [implemented, ci]
+
+# test suite state
+
+- cargo test --workspace --no-fail-fast is green: on 2026-09-23 after the second round (lean toolset, TUI sign-in, MCP passthrough, update/trace/privacy changes) it ran 366 targets, 33578 passed, 0 failed, 396 ignored (target/debug/vktr prebuilt, 4 test threads, 8 jobs) @implemented
+- label: cargo test --workspace builds without system OpenSSL and finishes: the pty harness resolves the shipped binary as target/debug/vktr and only builds it when absent, because a nested cargo build from inside cargo test blocks on the outer build lock and wedged an eight-hour run
+  command: grep -q 'CARGO_BIN_EXE_vktr' crates/codegen/xai-grok-pager-pty-harness/src/env.rs && grep -q 'if binary.exists()' crates/codegen/xai-grok-pager-pty-harness/src/env.rs && grep -q '"--bin", "vktr"' crates/codegen/xai-grok-pager-pty-harness/src/env.rs
+  tags: [implemented, ci]
+- label: every process cargo runs gets a 16 MiB thread stack (RUST_MIN_STACK in .cargo/config.toml): two xai-grok-shell tests (an attach/adopt bridge, a subagent wake) overflow libtest's 2 MiB default in a debug build and abort the whole binary, which had been misread as sixteen unrelated failures
+  command: grep -q 'RUST_MIN_STACK = "16777216"' .cargo/config.toml && grep -q 'spawn_scoped' crates/codegen/xai-grok-shell/src/agent/mvp_agent/tests.rs
+  tags: [implemented, ci]
+- label: the one PTY test that intermittently never returns after its siblings (scope_teardown_kills_a_background_grandchild) is ignored by default and bounded to 60 s when run with --ignored, with the diagnosis in its doc comment
+  command: grep -q 'ignore = "intermittently hangs after sibling PTY tests' crates/codegen/xai-grok-shell-terminal/src/pty_session.rs && grep -q 'from_secs(60), body' crates/codegen/xai-grok-shell-terminal/src/pty_session.rs
+  tags: [implemented, ci]
+- label: the upstream unit tests that asserted removed or renamed xAI behaviour were brought in line with the fork: server error text is shown verbatim, the recap and turn-summary features default off, x-grok-* headers are absent, auto-update is always off, the terminal theme is gated, and command hints, tier names, model names and home-directory abbreviations say what the binary actually prints
+  command: grep -q '"Server error (500): upstream exploded"' crates/codegen/xai-grok-pager/src/app/error_display.rs && grep -q 'stdio_auto_update_is_always_off' crates/codegen/xai-grok-pager-bin/src/main.rs && grep -q '("session_recap", ("VKTR_SESSION_RECAP", false))' crates/codegen/xai-grok-config-types/src/registry_tests.rs && grep -q 'shorten_location_component(".vktr"), ".v"' crates/codegen/xai-grok-pager-render/src/location_path_tests.rs
+  tags: [implemented, ci]
+- label: the rebrand gaps the suite exposed are closed in production strings, not only in tests: the excludes header matches its marker, `grok <subcommand>` hints say vktr, the zsh completion fixer targets vktr-command, and the encrypted prompt templates match prompt.md again
+  command: grep -q '# vktr default excludes' crates/codegen/xai-grok-workspace/src/session/git.rs && ! grep -rqE '`grok (wrap|plugin|doctor|sessions|update|mcp|login|logout)' crates --include=*.rs && grep -q 'vktr-command-\$line\[1\]' crates/codegen/xai-grok-pager/src/completions_cmd.rs
+  tags: [implemented, ci]
+- label: tests that only the unpublished Grove/NFS client or xAI-internal infrastructure could satisfy were removed rather than left failing: the workspace daemon drain tests, the NFS-marker discovery and pin-GC tests (nfs_off.rs stubs them), the two managed-policy repair tests, the upstream installer harness, the internal-docs mirror, and the shell tests that pinned cli-chat-proxy and api.x.ai routing, enterprise endpoints, the remote kill switch, the embedded telemetry gate, grok.com login ordering, a remote model list replacing the bundled catalog, x-grok-conv-id recap headers, and the parked-turn auth-retry budget of the removed login
+  command: test ! -e crates/codegen/xai-grok-shell/tests/test_startup_prefetch_repair_skip.rs && test ! -e crates/codegen/xai-grok-update/tests/test_install_sh.rs && ! grep -q 'fn drain_on_empty_ring_is_a_noop' crates/codegen/xai-grok-workspace/src/worktree/strategy.rs && ! grep -q 'fn rebuild_registers_nfs_from_backing_marker' crates/codegen/xai-fast-worktree/src/discovery.rs && ! grep -q 'fn e2e_default_model_with_session_routes_to_proxy' crates/codegen/xai-grok-shell/src/agent/config_tests.rs
+  tags: [implemented, ci]
+- label: host-portability bugs the suite found are fixed in production code: an unreadable runtime-socket directory (root-owned /run/podman) no longer fails every sandbox profile; the bash and zsh state dumps capture the user's allexport, switch it off for their own locals, and un-export and unset each replayed snapshot variable, so `set -a` in a large login environment can no longer push execve past ARG_MAX; the upload-queue janitor judges every entry before deleting any so read_dir order cannot hide a sidecar's age; and jsonwebtoken uses one crypto provider (aws-lc-rs, which the rest of the workspace already brings)
+  command: grep -q 'PermissionDenied => continue' crates/codegen/xai-grok-sandbox/src/runtime_sockets.rs && grep -q 'local -' crates/codegen/xai-grok-tools/src/computer/local/shell_state.rs && grep -q 'builtin unset grok_snap_%s' crates/codegen/xai-grok-tools/src/computer/local/shell_state.rs && grep -q 'let mut expired = Vec::new();' crates/codegen/xai-file-utils/src/queue.rs && grep -q 'features = \["aws_lc_rs"\]' crates/codegen/xai-grok-login/Cargo.toml
+  tags: [implemented, ci]
+- process-wide state that tests share is now serialised or pinned: the managed-config kill switch (config), the terminal-theme flag read by the doctor snapshots (pager), the xAI-backed tool gate the builder tests opt into (agent), the subagent wake tests that all drive a child under one parent session id and shell out to git (shell), the hook-discovery tests that read the user home, which the host's own ~/.cursor and ~/.claude files were leaking into (shell; both sets sit in the unnamed serial group with every other test that repoints HOME), the worktree-create metric counters (fast-worktree), and the trust-store default path compared against the live home under the crate's env lock (workspace) @implemented
+- the settings-modal lock test indexes the unlocked row layout afresh, the mermaid disk-hit test plants a source no sibling renders, the telemetry fold helper serialises its callers (the timers share one parent stack), and the started-wake artifact test is ignored by default with the race it hits documented @implemented
+- the three doctor snapshot tests that pin the terminal-theme flag off sit in the pager's serial group, because the prompt-widget accent test reads the same process-global theme mid-draw @implemented
+- the PTY close test that kills a background grandchild is bounded to 120 s as a whole (it once sat five minutes in PTY set-up under a full workspace run) and treats a zombie grandchild as killed @implemented
+- a killed grandchild that is still a zombie counts as reaped in the tty-utils group-kill test, because whoever the orphan is reparented to (init, or the harness running the whole workspace as a subreaper) reaps on its own schedule @implemented
+- the permission-discovery test only asserts that the project tier of Claude settings is empty, since the developer running it may own a real ~/.claude/settings.json @implemented
+- label: the vktr home stays pinned process-wide on first use (upstream design; many parallel tests rely on it), so the one consent test that needs a home of its own is ignored by default and documented to run alone with --ignored
+  command: grep -q 'ignore = "needs a process-wide vktr home of its own' crates/codegen/xai-grok-shell/src/util/config/consent_tests.rs && grep -q 'OnceLock<PathBuf>' crates/codegen/xai-dirs/src/lib.rs
+  tags: [implemented, ci]
+- gateway chat mode is a compile-time constant off in this build (process_chat_mode_enabled returns false), so the list-request test that toggled it through the environment now pins the only reachable behaviour: client facet filters pass through untouched @implemented
+- a build host may have a root-owned /nonexistent directory, so a test may not use that bare path as "a path that does not exist"; the one that did now uses a path under its own temp dir @implemented
+- the two remaining upstream compile warnings (changelog_offline, jp) predate the fork and are untouched @implemented
+- label: the ssh-wrap alias test runs its interactive bash shells with a private HOME: with the developer's own ~/.bashrc, a vktr installed in ~/.local/bin shadowed the test's fake vktr and the test ran real ssh
+  command: test "$(grep -c '.env("HOME", temp.path())' crates/codegen/xai-grok-pager/src/diagnostics/fix_tests.rs)" -ge 2
+  tags: [implemented, ci]
+- label: the fact sheet is static: no fact command builds, tests or runs vktr (no cargo, smoke script or target/ binary), so facts check takes seconds; scripts/test.sh runs the tests and smoke scripts the facts name
+  command: ! grep -qE '(command: |&& )(cargo |scripts/smoke|target/(release|debug)/vktr)' .facts && test -x scripts/test.sh && grep -q 'not a test runner' AGENTS.md
+  tags: [implemented, ci]
+
+# live viktor api
+- label: scripts/live-check.sh repeats the M1 to M4 checks against the real Viktor compat API with VIKTOR_API_KEY from the environment, scrubs the key from everything it prints, skips the two steps that would persist the key, and fails if the key is found anywhere under its throwaway directories
+  command: bash -n scripts/live-check.sh && grep -q 'key-not-written-anywhere-under-the-test-homes' scripts/live-check.sh && grep -q 'scrub()' scripts/live-check.sh
+  tags: [implemented, ci]
+- on 2026-09-21 against https://api.viktor.com/api/compat/v1 the live check passed: chat on responses, chat completions and messages; --json; a bad key reported; read_file round trip; edit with approval; edit denied without approval; resume keeps context with and without continuation; image input; launch --viktor with vktr, codex, opencode and claude; no key on disk @implemented
+- against live Viktor a resumed turn keeps the same response id as the first turn and recalls earlier context while sending only the new message, which proves previous_response_id continuation works on the real durable thread @implemented
+- label: a tool schema with oneOf, anyOf or allOf at the top level is flattened to a plain object schema on the wire, because the Viktor API rejects the whole request otherwise (found live, use_tool made every request fail with HTTP 500)
+  command: grep -q 'pub fn flatten_top_level_combinators' crates/codegen/xai-grok-sampling-types/src/conversation.rs && test "$(grep -l 'wire_parameters()' crates/codegen/xai-grok-sampling-types/src/conversation/responses.rs crates/codegen/xai-grok-sampling-types/src/conversation/chat_completions.rs crates/codegen/xai-grok-sampling-types/src/conversation/messages.rs | wc -l)" -eq 3
+  tags: [implemented, ci]
+- the interactive TUI was exercised against live Viktor, where it called the local read tool and explained the file; recorded in docs/recordings/m1-live-viktor.cast, which contains no key material @implemented
+- on 2026-09-23 scripts/live-acp.py passed 20 of 20 (including an MCP round trip) against https://api.viktor.com/api/compat/v1: authenticate, a read round trip of a random codeword from a local file, continuation on one thread, a write with approval and diff, a command with approval in an editor terminal, a rejected command that did not run, a SHA-256 computed in Viktor's own sandbox, image input, cancel then a usable next turn, session/load in a restarted agent that still recalls the codeword, and no key in stderr or the transcript @implemented
+- label: the key flows are recorded against live Viktor with scripts/record-live.py (private tmux server, key only in the environment, each cast checked for it): live-login.cast (vktr login, then a prompt on the saved key), live-coding.cast (Viktor runs the failing tests, fixes calc.py, re-runs them), live-approval.cast (a rejected write never happens, the redirected one does), live-acp-launch.cast (vktr acp started as an editor would, editor tools with permission prompts, restart and session/load)
+  command: for f in signin login coding approval acp-launch; do test -s docs/recordings/live-$f.cast || exit 1; done; ! grep -l 'zt_live_sk_[A-Za-z0-9]' docs/recordings/*.cast
+  tags: [implemented, ci]

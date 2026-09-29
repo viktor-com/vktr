@@ -168,7 +168,7 @@ impl std::fmt::Display for UninstallError {
                 write!(
                     f,
                     "Plugin \"{name}\" not found.\n\
-                     Run `grok plugin list` to see installed plugins."
+                     Run `vktr plugin list` to see installed plugins."
                 )
             }
             Self::RegistryLock { detail } => {
@@ -308,7 +308,7 @@ impl std::fmt::Display for UpdateError {
                 write!(
                     f,
                     "Plugin \"{name}\" not found.\n\
-                     Run `grok plugin list` to see installed plugins."
+                     Run `vktr plugin list` to see installed plugins."
                 )
             }
             Self::RegistryLock { detail } => {
@@ -646,7 +646,7 @@ impl std::fmt::Display for MarketplaceInstallError {
                     write!(
                         f,
                         "Unknown marketplace \"{qualifier}\". No marketplaces are registered; \
-                         add one with `grok plugin marketplace add`."
+                         add one with `vktr plugin marketplace add`."
                     )
                 } else {
                     let list = bullet_list(registered);
@@ -683,8 +683,8 @@ impl std::fmt::Display for MarketplaceInstallError {
                 write!(
                     f,
                     "No marketplace plugin named \"{name}\" in any registered marketplace.\n\
-                     Install a local directory with `grok plugin install ./{name}`, or add a \
-                     source with `grok plugin marketplace add`."
+                     Install a local directory with `vktr plugin install ./{name}`, or add a \
+                     source with `vktr plugin marketplace add`."
                 )?;
                 if !skipped_sources.is_empty() {
                     write!(
@@ -701,7 +701,7 @@ impl std::fmt::Display for MarketplaceInstallError {
                 write!(
                     f,
                     "Multiple marketplaces provide a plugin named \"{name}\":\n{list}\n\
-                     Pin one with `grok plugin install {name}@<qualifier>`."
+                     Pin one with `vktr plugin install {name}@<qualifier>`."
                 )
             }
             Self::PartialScan {
@@ -713,7 +713,7 @@ impl std::fmt::Display for MarketplaceInstallError {
                     f,
                     "Couldn't scan every marketplace while resolving \"{name}\", so it can't be \
                      resolved safely. Unscanned source(s):\n{list}\n\
-                     Retry, or pin the source explicitly with `grok plugin install {name}@<qualifier>`."
+                     Retry, or pin the source explicitly with `vktr plugin install {name}@<qualifier>`."
                 )
             }
             Self::Sync {
@@ -1398,10 +1398,10 @@ pub fn try_remove_source_from_json_files(source_url_or_path: &str) -> bool {
     // Resolve user vktr via user_grok_home() (None when no home resolves) and home separately
     // Removal then still runs from $VKTR_HOME when no home dir exists, and never touches a cwd-relative .vktr
     let home = xai_dirs::home_dir();
-    let vktr = xai_grok_config::user_grok_home();
+    let grok = xai_grok_config::user_grok_home();
 
     let mut settings_candidates: Vec<std::path::PathBuf> = Vec::new();
-    if let Some(ref vktr) = vktr {
+    if let Some(ref grok) = grok {
         settings_candidates.push(grok.join("settings.local.json"));
         settings_candidates.push(grok.join("settings.json"));
     }

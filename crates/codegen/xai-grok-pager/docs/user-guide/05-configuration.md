@@ -1,6 +1,6 @@
 # Configuration
 
-vktr reads settings from config files, environment variables, and CLI flags. This page covers the common options. The field list for `config.toml`, `managed_config.toml`, and `requirements.toml` is [26-config-reference.md](26-config-reference.md) (extracted to `~/.vktr/docs/user-guide/` on launch).
+vktr reads settings from config files, environment variables, and CLI flags. This page covers the common options. The field list for `config.toml` and `requirements.toml` is [26-config-reference.md](26-config-reference.md) (extracted to `~/.vktr/docs/user-guide/` on launch).
 
 ---
 
@@ -9,7 +9,7 @@ vktr reads settings from config files, environment variables, and CLI flags. Thi
 Settings resolve highest-priority first:
 
 1. **CLI flags** (e.g. `--yolo`, `--model`, `--sandbox`)
-2. **Environment variables** (e.g. `XAI_API_KEY`, `VKTR_MEMORY`)
+2. **Environment variables** (e.g. `VIKTOR_API_KEY`, `VIKTOR_BASE_URL`, `VKTR_MEMORY`)
 3. **`requirements.toml` / MDM** (org-enforced; clamps every config layer below, including the overlay)
 4. **`VKTR_CONFIG` / `VKTR_CONFIG_PATH` overlay** (above `config.toml` and managed, below `requirements.toml` / MDM)
 5. **config.toml** (`~/.vktr/config.toml`)
@@ -18,7 +18,7 @@ Settings resolve highest-priority first:
 
 Within the config-file tier, the layers merge lowest-to-highest: `managed_config.toml` → `config.toml` → `VKTR_CONFIG` overlay → `requirements.toml` / MDM. So `requirements.toml` and MDM clamp **both** your `config.toml` and the overlay.
 
-`VKTR_CONFIG` / `VKTR_CONFIG_PATH` (tier 4) are config **overlays**: a merged config layer, not direct-setting environment variables like `XAI_API_KEY` (tier 2). They set config keys (subject to the allowlist below), so read them as part of the config-file tier rather than the env-var tier.
+`VKTR_CONFIG` / `VKTR_CONFIG_PATH` (tier 4) are config **overlays**: a merged config layer, not direct-setting environment variables like `VIKTOR_API_KEY` (tier 2). They set config keys (subject to the allowlist below), so read them as part of the config-file tier rather than the env-var tier.
 
 ### Injecting config with `VKTR_CONFIG`
 
@@ -27,7 +27,7 @@ A harness or ACP client that launches `vktr agent stdio` can inject settings wit
 - **`VKTR_CONFIG`**: an inline JSON object overlay.
 - **`VKTR_CONFIG_PATH`**: an *additional* file overlay (not a replacement for `config.toml`), a JSON or TOML file read by its extension (`.json` → JSON, else TOML). `VKTR_CONFIG` wins if both are set. An empty `VKTR_CONFIG` is treated as unset, and a malformed one logs a warning and falls through to `VKTR_CONFIG_PATH`.
 
-The overlay is **deep-merged** on top of your `config.toml` (it overrides only the keys it sets), placed above the user/managed layers but **below** `requirements.toml` / MDM so an enterprise pin still wins. A malformed blob is ignored with a warning. This mirrors `CODEX_CONFIG` from the `codex-acp` adapter (a JSON object merged into the session config); vktr is ACP-native, so the overlay lives in the agent itself. It only affects settings read from the merged config, and it is **not** a permission-escalation path. The overlay is confined, fail-closed, to an **allowlist** of soft settings (`models`, `features`, a narrowed `toolset`, and a `shell_environment_policy` limited to its filter fields, which select among env names the launcher already controls and cannot inject an env value into tool subprocesses); every other table is dropped at the choke point, so the overlay cannot spawn commands, set auth policy, redirect network traffic, elevate trust, or add a discovery source. Even on the allowlisted settings, a specific set of security gates read the raw disk layers rather than the overlay. The `ConfigLayers::env_overlay` rustdoc is the canonical list of what the overlay can and cannot reach and which gates read it overlay-free; see also the [internal environment-variables reference](../internal/22-environment-variables.md). Use `VKTR_DEFAULT_SELECTED_PERMISSION` for headless permission control. For example, to set the default reasoning effort:
+The overlay is **deep-merged** on top of your `config.toml` (it overrides only the keys it sets), placed above the user/managed layers but **below** `requirements.toml` / MDM so an enterprise pin still wins. A malformed blob is ignored with a warning. This mirrors `CODEX_CONFIG` from the `codex-acp` adapter (a JSON object merged into the session config); vktr is ACP-native, so the overlay lives in the agent itself. It only affects settings read from the merged config, and it is **not** a permission-escalation path. The overlay is confined, fail-closed, to an **allowlist** of soft settings (`models`, `features`, a narrowed `toolset`, and a `shell_environment_policy` limited to its filter fields, which select among env names the launcher already controls and cannot inject an env value into tool subprocesses); every other table is dropped at the choke point, so the overlay cannot spawn commands, set auth policy, redirect network traffic, elevate trust, or add a discovery source. Even on the allowlisted settings, a specific set of security gates read the raw disk layers rather than the overlay. The `ConfigLayers::env_overlay` rustdoc is the canonical list of what the overlay can and cannot reach and which gates read it overlay-free. Use `VKTR_DEFAULT_SELECTED_PERMISSION` for headless permission control. For example, to set the default reasoning effort:
 
 ```bash
 VKTR_CONFIG='{"models": {"default_reasoning_effort": "high"}}' vktr agent stdio
@@ -37,24 +37,60 @@ VKTR_CONFIG='{"models": {"default_reasoning_effort": "high"}}' vktr agent stdio
 
 ## config.toml (main configuration)
 
-Location: `~/.vktr/config.toml`. If the file is missing, vktr uses its built-in defaults, so you only need to set the values you want to override.
+Location: `~/.vktr/config.toml` (override the directory with `VKTR_HOME`). If the file is missing, vktr uses its built-in defaults, so you only need to set the values you want to override. With only `VIKTOR_API_KEY` set, vktr works without any config file.
+
+### Viktor endpoint and protocol
+
+The built-in model is `viktor`, served by the Viktor compat API.
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `VIKTOR_BASE_URL` / `[endpoints] viktor_base_url` | `https://api.viktor.com/api/compat/v1` | The Viktor compat API base URL |
+| `VIKTOR_API_BACKEND` / `[model.viktor] api_backend` | `responses` | Wire protocol: `responses`, `chat_completions`, or `messages` |
+| `VKTR_RESPONSES_CONTINUATION` | on | `0` turns off thread continuation on the responses protocol |
+
+On the `responses` protocol a session is one Viktor thread: vktr sends `previous_response_id` with only the new input (the next message or tool results), including after `--continue` / `--resume`. The `chat_completions` and `messages` protocols are stateless and resend the full history on every request.
+
+```toml
+[endpoints]
+viktor_base_url = "https://api.viktor.com/api/compat/v1"
+
+[model.viktor]
+api_key = "zt_live_sk_..."          # written by `vktr login`
+# api_backend = "chat_completions"  # or "messages"; default "responses"
+```
+
+### One prompt, one request
+
+Each request to Viktor is a billed Viktor run, so vktr makes exactly one request per prompt. Upstream's extra model calls are off by default; opt back in if you use a cheap local model:
+
+| Feature | Opt in with |
+|---------|-------------|
+| LLM-generated session titles | `VKTR_LLM_SESSION_TITLES=1` |
+| Post-turn summaries | `[features] turn_summary = true` |
+| Session recap | `[features] session_recap = true` |
+| Prompt suggestions | `[ui] prompt_suggestions = true` |
+
+Automatic compaction is also skipped for the built-in `viktor` model on the responses protocol, because Viktor compacts its own threads server-side and a client-side compaction would cost a run and move the session to a new thread. `/compact` still works. Stateless protocols and `VKTR_RESPONSES_CONTINUATION=0` compact as before; `VKTR_VIKTOR_CLIENT_COMPACTION=1` restores automatic compaction.
+
+### Toolset
+
+The default toolset is lean: workflows and subagents are off, and the `scheduler_*`, `monitor`, and `update_goal` tools are not offered. `VKTR_FULL_TOOLSET=1` restores upstream's full set; `VKTR_WORKFLOWS=1` or `VKTR_SUBAGENTS=1` (or `[workflows] enabled = true` / `[subagents] enabled = true`) enables one family. An explicit `--tools` list that names a left-out tool keeps it.
+
+Tools that only work against xAI's backend (`web_search`, image and video generation, `send_feedback`) are not offered unless `VKTR_XAI_BACKED_TOOLS=1`; they do not work against Viktor.
 
 ### General settings
 
 ```toml
-[cli]
-auto_update = true                     # check for updates on launch
-
 [agent]
-# name = "grok-build"                  # default agent on interactive `vktr` (no --plan / --agent-profile)
+# name = "my-agent"                    # default agent on interactive `vktr` (no --plan / --agent-profile)
 # definition = "/path/to/agent.md"     # path wins over name if both are set
 
 [models]
-default = "grok-4.5"                   # model used for new sessions
-web_search = "grok-4.5"                # model used by the web_search tool
+default = "viktor"                     # model used for new sessions (built-in default: viktor)
 # Optional picker allowlist (globs on catalog key or model id). Empty = unrestricted.
 # A signed policy pin replaces this list (model id only) and cannot be widened from here.
-# allowed_models = ["grok-4.5", "grok-4*"]
+# allowed_models = ["viktor", "local*"]
 
 # Defaults applied to every model; a per-model [model.<id>] value always wins.
 # See "Custom Models" for the per-model overrides and full details.
@@ -91,31 +127,21 @@ screen_mode = "fullscreen"             # default render mode: "fullscreen" | "mi
                                        # (unset → fullscreen); set via /settings → Default screen mode
 
 [features]
-telemetry = false                      # anonymous usage telemetry
-feedback = true                        # feedback system (default: true)
 lsp_tools = false                      # expose the lsp tool
 codebase_indexing = true               # code graph indexing (default: true)
 two_pass_compaction = true             # prefire two-pass compaction (default: true)
-remote_fetch = true                    # allow optional online model-catalog fetches (default: true;
-                                       # set false for firewalled/air-gapped deployments; background
-                                       # managed-config sync has its own switch: managed_config)
+remote_fetch = true                    # allow optional online model-catalog fetches from your
+                                       # configured endpoint (default: true; set false for
+                                       # firewalled/air-gapped deployments)
 
 [session]
-auto_compact_threshold_percent = 85    # auto-compact at this % of context window (default: 85)
+auto_compact_threshold_percent = 85    # auto-compact at this % of context window (default: 85;
+                                       # not used for viktor on the responses protocol, see above)
 load_envrc = true                      # load .envrc environment variables
 
 [tools]
 respect_gitignore = false              # default: false; set true to make every tool skip gitignored files
 
-# Optional caps on parallel media generation in a single model step.
-# Per tool name. First 2×-or-more burst: discard that step and retry once.
-# Any other over-cap (including a second 2× burst) keeps the first K.
-# Defaults: image 8, video 4.
-# Env vars VKTR_MAX_PARALLEL_IMAGE_GEN_CALLS / VKTR_MAX_PARALLEL_VIDEO_GEN_CALLS
-# override these values (see environment-variables doc).
-# [tools.media_gen]
-# max_parallel_image_gen_calls = 8
-# max_parallel_video_gen_calls = 4
 ```
 
 ### Default agent
@@ -232,38 +258,26 @@ timeout_secs = 1800                    # seconds to wait when enabled (default: 
 
 [toolset.web_fetch]
 proxy_endpoint = "https://proxy.example.com"   # egress proxy URL
-allowed_domains = ["docs.rs", "x.ai"]          # override the built-in allowlist
+allowed_domains = ["docs.rs", "viktor.com"]   # override the built-in allowlist
 allow_local = false                            # true = allow localhost / 127.0.0.0/8 / ::1 only
 
 [toolset.web_search]
+# Only used when VKTR_XAI_BACKED_TOOLS=1 (web_search does not work against Viktor).
 # Restrict web_search to these domains (max 5). Mutually exclusive with excluded_domains.
-allowed_domains = ["docs.x.ai", "arxiv.org"]
+allowed_domains = ["docs.rs", "arxiv.org"]
 # ...or block these domains instead (leave allowed_domains unset):
 # excluded_domains = ["reddit.com", "pinterest.com"]
 ```
 
 `allow_local` is off by default (SSRF fail-closed). Turn it on (or set `VKTR_WEB_FETCH_ALLOW_LOCAL=1`) and `web_fetch` may reach **explicit** loopback hosts only — private, link-local, and cloud-metadata ranges stay blocked. Resolution: TOML > env > default off.
 
-`[toolset.web_search]` constrains the `web_search` tool's domains — the allowlist/blocklist the search itself runs under (not a post-filter). `allowed_domains` and `excluded_domains` are **mutually exclusive**; if you set both, the allowlist wins and the blocklist is dropped with a warning. An empty or absent list is unbounded. This applies to both the backend-hosted search (models with server-side search) and the client-side fallback. A configured policy is **authoritative**: it cannot be bypassed by the model — the model's own per-call `allowed_domains` is ignored whenever you have set `allowed_domains` or `excluded_domains` here (so a blocklist is a real block). The model's per-call allowlist only applies when you have configured nothing. Resolution: requirements → user `config.toml` → managed → default (unset). Config is read at session start, so edit it before starting a session — changes don't apply mid-session.
+`[toolset.web_search]` applies only when the xAI-backed `web_search` tool is turned on with `VKTR_XAI_BACKED_TOOLS=1`. It constrains the tool's domains — the allowlist/blocklist the search itself runs under (not a post-filter). `allowed_domains` and `excluded_domains` are **mutually exclusive**; if you set both, the allowlist wins and the blocklist is dropped with a warning. An empty or absent list is unbounded. This applies to both the backend-hosted search (models with server-side search) and the client-side fallback. A configured policy is **authoritative**: it cannot be bypassed by the model — the model's own per-call `allowed_domains` is ignored whenever you have set `allowed_domains` or `excluded_domains` here (so a blocklist is a real block). The model's per-call allowlist only applies when you have configured nothing. Resolution: requirements → user `config.toml` → managed → default (unset). Config is read at session start, so edit it before starting a session — changes don't apply mid-session.
 
 `[toolset.ask_user_question]` is honored across **requirements.toml**, **managed config**, and your user **`config.toml`**. Precedence: requirements → env (`VKTR_ASK_USER_QUESTION_TIMEOUT_ENABLED` / `VKTR_ASK_USER_QUESTION_TIMEOUT_SECS`) → user config → managed → defaults. Set `timeout_enabled = false` in your user config to disable the automatic questionnaire timeout for yourself; `timeout_secs` must be a positive integer. You can also toggle `timeout_enabled` from `/settings` → **Ask-Question timeout** (under Agent & Approval); changes apply to newly started sessions.
 
 ### Authentication
 
-See [Authentication](02-authentication.md) for the full story.
-
-```toml
-[auth]
-auth_provider_command = "/usr/local/bin/my-auth-provider"
-auth_provider_label = "Acme Corp"
-auth_token_ttl = 3600
-
-[grok_com_config.oidc]
-issuer = "https://acme.okta.com"
-client_id = "0oa1b2c3d4e5f6g7h8i9"
-# scopes = ["openid", "profile", "email", "offline_access", "api:access"]
-# audience = "https://api.acme.com"
-```
+vktr uses a Viktor API key from `VIKTOR_API_KEY` or from `[model.viktor] api_key` (written by `vktr login`). There is no browser, OIDC, or device-code login. See [Authentication](02-authentication.md).
 
 ### Custom models
 
@@ -276,7 +290,7 @@ base_url = "https://api.example.com/v1"  # OpenAI-compatible endpoint
 name = "Display Name"                 # shown in model picker
 description = "Model description"      # optional
 api_key = "sk-..."                    # API key for this provider
-env_key = "XAI_API_KEY"               # env var(s) holding the API key; string or array (first set, non-empty wins)
+env_key = "OPENAI_API_KEY"            # env var(s) holding the API key; string or array (first set, non-empty wins)
 temperature = 0.7                     # sampling temperature (0.0-2.0)
 top_p = 0.95                          # nucleus sampling parameter
 max_completion_tokens = 8192          # max tokens per response
@@ -285,13 +299,13 @@ query_params = { api-version = "2026-07-22" } # query params appended to every r
 env_http_headers = { "X-Tenant" = "TENANT_TOKEN" }    # request headers from env vars, resolved at client build
 ```
 
-Credential resolution: `api_key` > `env_key` > signed-in session token > `XAI_API_KEY`. See [Custom Models](11-custom-models.md#request-query-parameters) for `query_params` and `env_http_headers`, and [Sandbox Mode](18-sandbox.md#shell-environment-policy) for `[shell_environment_policy]`, which restricts the environment variables tool subprocesses inherit.
+Credential resolution for a model: its own `api_key`, then its `env_key`. See [Custom Models](11-custom-models.md#request-query-parameters) for `query_params` and `env_http_headers`, and [Sandbox Mode](18-sandbox.md#shell-environment-policy) for `[shell_environment_policy]`, which restricts the environment variables tool subprocesses inherit.
 
 To override a built-in model, use its name as the section key and set only the fields you need:
 
 ```toml
-[model.grok-4.6]
-api_key = "my-api-key"
+[model.viktor]
+api_backend = "chat_completions"
 ```
 
 ### MCP servers
@@ -317,7 +331,7 @@ url = "https://mcp.example.com/api/mcp"  # HTTP/SSE transport
 headers = { "x-mcp-session-id" = "{{session_id}}" }
 ```
 
-Remote (HTTP/SSE) servers receive a default `User-Agent: grok-cli/<version>` header; a
+Remote (HTTP/SSE) servers receive a default `User-Agent: grok-cli/<version>` header (the upstream product name, kept as-is); a
 valid `User-Agent` entry in `headers` overrides it (Figma servers receive bare
 `grok-cli`). See [MCP servers](07-mcp-servers.md) for details.
 
@@ -357,6 +371,8 @@ dimensions = 1024                     # vector dimensions
 
 ### Subagents
 
+Subagents are off by default in vktr (see [Toolset](#toolset)); `[subagents] enabled = true` or `VKTR_SUBAGENTS=1` turns them on.
+
 ```toml
 [subagents]
 enabled = true
@@ -367,7 +383,7 @@ explore = true                        # enable/disable specific types
 plan = false
 
 [subagents.models]
-explore = "grok-4.6"               # route to different models
+explore = "local"                  # route to a different model (a [model.<name>] key)
 ```
 
 To pin the model a subagent uses, set its entry under `[subagents.models]`.
@@ -376,11 +392,11 @@ To pin the model a subagent uses, set its entry under `[subagents.models]`.
 
 `/goal` has two drivers, chosen by the background-workflows setting. With workflows enabled, the host-owned workflow engine evaluates rounds and drives completion verification; with them disabled, `/goal` falls back to the legacy model-facing `update_goal` tool. Whether `/goal` is available at all is a separate switch (the goal feature setting).
 
-Background workflows — the `workflow` tool, named `.vktr/workflows/*.rhai` scripts, `/deep-research`, and `/workflow` launches — are **on by default**. Disable with config, env, or remote settings.
+Background workflows — the `workflow` tool, named `.vktr/workflows/*.rhai` scripts, `/deep-research`, and `/workflow` launches — are **off by default** in vktr, as part of the lean toolset. Enable them with config or env:
 
 ```toml
 [workflows]
-enabled = false                       # disable background workflows (or VKTR_WORKFLOWS=0)
+enabled = true                        # enable background workflows (or VKTR_WORKFLOWS=1, or VKTR_FULL_TOOLSET=1)
 ```
 
 Project workflows are discovered from `<repo-root>/.vktr/workflows/`; user workflows from `~/.vktr/workflows/`. Discovery and invocation key off the script's `meta.name`, so keep each filename aligned with its `meta.name`. Built-ins win over project names, and project names win over user names, so keep names unique across scopes.
@@ -441,7 +457,7 @@ disabled = ["user/a1b2c3d4/noisy-plugin"]
 
 `[hints]` holds small persisted UI preferences: remembered answers and modal layout. vktr writes these for you as you use the TUI, but you can edit or delete them by hand; removing a key restores the default.
 
-`[hints]` is read from the **effective config merge**, with the usual precedence: system managed → user `managed_config.toml` → user `config.toml` → user `requirements.toml` → system `requirements.toml`, higher layers winning. The TUI only ever **writes** these to your user `~/.vktr/config.toml`.
+`[hints]` is read from the **effective config merge**, with the usual precedence: user `config.toml` → user `requirements.toml` → system `requirements.toml`, higher layers winning. The TUI only ever **writes** these to your user `~/.vktr/config.toml`.
 
 ```toml
 [hints]
@@ -498,7 +514,6 @@ items = ["action-required", "spinner", "activity", "session-name", "vktr"]
 | VS Code | BEL | Yes | No |
 | Apple Terminal | BEL | No | No |
 | VTE (GNOME Terminal) | OSC 777 | Yes | No |
-| vktr Desktop | None (native) | N/A | N/A |
 | Unknown | BEL | No | No |
 
 With `method = "auto"`, vktr detects the terminal brand and picks the best protocol. Set `method` explicitly to override that.
@@ -517,7 +532,7 @@ timeout_secs = 10
 
 # Push to ntfy server
 [[ui.notifications.hooks]]
-command = "curl -s -d '$VKTR_MESSAGE' ntfy.sh/my-grok-alerts"
+command = "curl -s -d '$VKTR_MESSAGE' ntfy.sh/my-vktr-alerts"
 events = ["turn_complete"]
 only_unfocused = true
 timeout_secs = 10
@@ -563,26 +578,9 @@ Keyboard shortcuts are **not** configurable — all bindings are built in. See [
 
 ### Telemetry
 
-These are independent knobs (see [Monitoring Usage](24-monitoring-usage.md#related-settings)):
+vktr sends no product telemetry, uploads no traces (`vktr trace` always exports locally), and has no feedback service (`/feedback` notes stay in the session's `feedback.jsonl`).
 
-- **`[features] telemetry`** / `VKTR_TELEMETRY_ENABLED` — the product-analytics master switch. `/privacy` doesn't change it.
-- **Coding data, retention, and training** — the Settings row `/privacy` opens; coding-data sharing, separate from telemetry.
-- **`[telemetry] trace_upload`** / `VKTR_TELEMETRY_TRACE_UPLOAD` — session traces; follows telemetry when unset.
-- **`[telemetry] otel_*`** / `VKTR_EXTERNAL_OTEL` — external OTEL to your own collector (below).
-
-When telemetry is on, enterprises running their own collector can redirect it or turn parts off under `[telemetry]`:
-
-```toml
-[telemetry]
-events_url = "https://telemetry.your-company.com/events"  # send events to your own collector
-events_api_key = "your-collector-token"                   # auth for your collector, if required
-mixpanel_enabled = false                                  # disable Mixpanel product analytics
-trace_upload = false                                      # disable session/trace uploads (inherits the telemetry toggle when unset)
-```
-
-Set these only to point telemetry at your own infrastructure or to switch parts off. The built-in endpoint and credentials are managed by vktr — leave them unset to use the defaults.
-
-The same `[telemetry]` table also configures the **external OpenTelemetry stream**, an independent opt-in (it doesn't require the telemetry toggle above) that ships a curated, content-free usage schema to your *own* OTLP collector. Collector auth comes from `OTEL_EXPORTER_OTLP_HEADERS` and is never stored on disk. See [Monitoring & Usage](24-monitoring-usage.md) for the full schema, env vars, and privacy model.
+The `[telemetry]` table can configure an optional **external OpenTelemetry stream** that ships a curated, content-free usage schema to your *own* OTLP collector. It is off unless you opt in. Collector auth comes from `OTEL_EXPORTER_OTLP_HEADERS` and is never stored on disk. See [Monitoring Usage](24-monitoring-usage.md) for the schema, env vars, and privacy model.
 
 ```toml
 [telemetry]
@@ -596,75 +594,34 @@ otel_client_certificate = "/etc/ssl/client.crt"           # optional: mTLS clien
 otel_client_key = "/etc/ssl/client.key"                   # optional: mTLS client key (path only)
 otel_log_user_prompts = false                             # content gate (admins pin via requirements)
 otel_log_assistant_responses = false                      # unset follows prompts; pin false for prompts-only
-otel_log_tool_details = true                              # metadata/preview; enterprise default on for SIEM join
-otel_log_tool_content = false                             # full-body gate; independent of details — does not imply names/paths
+otel_log_tool_details = true                              # metadata/preview
+otel_log_tool_content = false                             # full-body gate; independent of details
 ```
 
 Listed `[telemetry] otel_*` keys in signed `requirements.toml` **pin** over
-process env (destination lock). `managed_config.toml` does not. There is no
-`headers` key — collector tokens stay in `OTEL_EXPORTER_OTLP_HEADERS`. See
-[Monitoring & Usage](24-monitoring-usage.md).
+process env (destination lock). There is no `headers` key — collector tokens
+stay in `OTEL_EXPORTER_OTLP_HEADERS`.
 
-### Version pinning
+### Updates
 
-Control which versions the CLI may auto-update to and which versions may run. Set
-these in `[cli]`, or in a managed layer for fleet-wide policy. Each has an
-environment override that can only tighten the bound, for CI and testing.
+vktr does not update itself and never contacts an update server. `vktr update` prints how to update: rerun the installer you used, or run `sh install.sh --from-source` in a checkout.
 
-> **Changed:** `minimum_version` no longer blocks startup. It is now a soft
-> anti-downgrade floor for the updater. For a hard floor that prevents old
-> versions from starting, use `required_minimum_version`.
+### Team setup
+
+A config that uses Viktor by default and adds a local model:
 
 ```toml
-[cli]
-minimum_version = "0.2.109"          # updater won't downgrade below this
-maximum_version = "0.2.180"          # updater won't install above this
-required_minimum_version = "0.2.100" # refuse to start below this
-required_maximum_version = "0.2.200" # refuse to start above this
-```
-
-- `minimum_version` (`VKTR_MINIMUM_VERSION`) is a soft anti-downgrade floor. The
-  updater skips a target below it and keeps the current version. It never blocks
-  startup.
-- `maximum_version` (`VKTR_MAXIMUM_VERSION`) is a soft ceiling. The updater caps
-  its target at it and never installs above it.
-- `required_minimum_version` (`VKTR_REQUIRED_MINIMUM_VERSION`) and
-  `required_maximum_version` (`VKTR_REQUIRED_MAXIMUM_VERSION`) are hard bounds. If
-  the running version is outside the range, the CLI exits at startup and instructs
-  the user to install an approved version. `vktr update` and `vktr --version` keep
-  working so an out-of-range install can recover.
-- Bounds resolve across config layers by tightening only: a floor takes the
-  highest value and a ceiling the lowest, so a managed bound can't be loosened,
-  and a user or environment bound can't cancel a managed hard bound. An invalid
-  value is ignored so a bad policy can't block startup.
-- An explicit `vktr update --version X` is allowed above the ceiling, to recover
-  from a too-new install, and rejected below the hard floor.
-
-### Enterprise deployment
-
-A complete config for enterprise use:
-
-```toml
-[cli]
-auto_update = false
-
-[auth]
-auth_provider_command = "/usr/local/bin/my-company-auth-provider"
-auth_provider_label = "Acme Corp"
-auth_token_ttl = 3600
-
 [models]
-default = "company-grok"
+default = "viktor"
 
-[model.company-grok]
-model = "grok-4.6"
-base_url = "https://grok-proxy.acme.com/"
-name = "Grok 4.6 (Proxy)"
-context_window = 128000
-
-[features]
-telemetry = false
+[model.local]
+model = "qwen3.5:4b"
+base_url = "http://localhost:11434/v1"
+name = "Local Qwen"
+env_key = "OPENAI_API_KEY"
 ```
+
+Keep the Viktor key out of shared files: each user runs `vktr login` or sets `VIKTOR_API_KEY`.
 
 ---
 
@@ -773,33 +730,30 @@ disable_plugins = false               # hide hooks/plugins UI entirely
 
 ## Environment variables
 
-The key ones. See the README for the complete list.
+The key ones.
 
-### Authentication
-
-| Variable | Description |
-|----------|-------------|
-| `XAI_API_KEY` | API key from console.x.ai |
-| `VKTR_AUTH_PROVIDER_COMMAND` | External auth binary path |
-| `VKTR_AUTH_PROVIDER_LABEL` | Display name on TUI login screen |
-| `VKTR_AUTH_TOKEN_TTL` | Token lifetime in seconds |
-| `VKTR_AUTH_EARLY_INVALIDATION_SECS` | Seconds before expiry to refresh (default: 300) |
-| `VKTR_OIDC_ISSUER` | OIDC issuer URL |
-| `VKTR_OIDC_CLIENT_ID` | OIDC client ID |
-
-### Endpoints
+### Viktor
 
 | Variable | Description |
 |----------|-------------|
-| `VKTR_CLI_CHAT_PROXY_BASE_URL` | Override API proxy base URL |
+| `VIKTOR_API_KEY` | Viktor API key (`zt_live_sk_…`, scope `chat:completions`). `XAI_API_KEY` is accepted as a legacy fallback |
+| `VIKTOR_BASE_URL` | Viktor compat API base URL (default `https://api.viktor.com/api/compat/v1`) |
+| `VIKTOR_API_BACKEND` | `responses` (default), `chat_completions`, or `messages` |
+| `VKTR_RESPONSES_CONTINUATION` | `0` disables Viktor thread continuation on the responses protocol |
+| `VKTR_VIKTOR_CLIENT_COMPACTION` | `1` restores automatic client-side compaction for Viktor |
+| `VKTR_LLM_SESSION_TITLES` | `1` generates session titles with an extra model request |
+| `VKTR_FULL_TOOLSET` | `1` restores upstream's full toolset (workflows, subagents, scheduler, monitor, goal) |
+| `VKTR_XAI_BACKED_TOOLS` | `1` offers the xAI-only tools (web search, image/video generation, feedback); they do not work against Viktor |
+| `VKTR_ACP_EDITOR_TOOLS` | `0` stops `vktr acp` from offering editor file and terminal tools |
+| `VKTR_ACP_MCP` | `0` stops `vktr acp` from connecting the editor's MCP servers |
 
 ### Features
 
 | Variable | Description |
 |----------|-------------|
 | `VKTR_MEMORY` | Enable (`1`) or disable (`0`) cross-session memory |
-| `VKTR_SUBAGENTS` | Enable (`1`) or disable (`0`) subagents |
-| `VKTR_WORKFLOWS` | Enable (`1`) or disable (`0`) background workflows and select the `/goal` driver (default on: host-owned workflow driver; off: legacy `update_goal`) |
+| `VKTR_SUBAGENTS` | Enable (`1`) or disable (`0`) subagents (default off) |
+| `VKTR_WORKFLOWS` | Enable (`1`) or disable (`0`) background workflows and select the `/goal` driver (default off in vktr; on: host-owned workflow driver; off: legacy `update_goal`) |
 | `VKTR_WEB_FETCH` | Enable (`1`) or disable (`0`) the web_fetch tool |
 | `VKTR_WEB_FETCH_ALLOW_LOCAL` | Allow `web_fetch` to explicit loopback hosts only (`localhost` / `127.0.0.0/8` / `::1`). Same as `[toolset.web_fetch] allow_local`. Default off; private/metadata stay blocked. |
 | `VKTR_AGENT` | Custom agent definition path or name |
@@ -824,12 +778,7 @@ The key ones. See the README for the complete list.
 
 | Variable | Description |
 |----------|-------------|
-| `VKTR_TELEMETRY_ENABLED` | Enable/disable telemetry |
-| `VKTR_TELEMETRY_TRACE_UPLOAD` | Enable/disable session trace upload |
-| `VKTR_TELEMETRY_MIXPANEL_ENABLED` | Enable/disable Mixpanel specifically |
-| `VKTR_EXTERNAL_OTEL` | External OTEL to your collector (see [24-monitoring-usage.md](24-monitoring-usage.md)) |
-| `VKTR_FEEDBACK_ENABLED` | Enable/disable feedback system |
-| `VKTR_DEPLOYMENT_KEY` | Management API key for enterprise |
+| `VKTR_EXTERNAL_OTEL` | External OTEL to your own collector (see [24-monitoring-usage.md](24-monitoring-usage.md)) |
 
 ---
 
@@ -839,8 +788,8 @@ The key ones. See the README for the complete list.
 |------|-------------|
 | `~/.vktr/config.toml` | Main configuration file |
 | `~/.vktr/pager.toml` | TUI appearance configuration |
-| `~/.vktr/auth.json` | Authentication credentials (auto-managed) |
 | `~/.vktr/sessions/` | Persisted sessions (organized by working directory) |
+| `~/.vktr/acp/sessions/` | `vktr acp` editor sessions (owner-only) |
 | `~/.vktr/memory/` | Cross-session memory files and index |
 | `~/.vktr/skills/` | User-scoped skill definitions |
 | `~/.vktr/plugins/` | User-scoped plugins |

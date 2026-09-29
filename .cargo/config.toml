@@ -35,7 +35,7 @@ rustflags = [
 rustflags = ["-C", "force-unwind-tables=yes"]
 
 [target.aarch64-unknown-linux-gnu]
-rustflags = ["-C", "target-cpu=neoverse-v2", "-C", "force-unwind-tables=yes"]
+rustflags = ["-C", "force-unwind-tables=yes"]
 
 [target.x86_64-unknown-linux-musl]
 rustflags = [
@@ -74,14 +74,11 @@ rustflags = ["-C", "force-unwind-tables=yes", "-C", "target-feature=+crt-static"
 # env vars below for those platforms.
 # See: https://github.com/tikv/jemallocator/issues/122
 [env]
-SYSTEM_DEPS_DAV1D_BUILD_INTERNAL = "auto"
-# rusty_ffmpeg (rsmpeg): link the hermetic static FFmpeg staged by
-# third_party/ffmpeg/fetch_local.py and use the pregenerated bindings
-# for that exact build, so cargo never runs pkg-config or bindgen. Bazel wires
-# the same two inputs through the rusty_ffmpeg annotation in MODULE.bazel.
-FFMPEG_BINDING_PATH = { value = "third_party/ffmpeg/binding.rs", relative = true }
-FFMPEG_LIBS_DIR = { value = "third_party/ffmpeg/local/lib", relative = true }
-FFMPEG_LINK_MODE = "static"
+# Test threads get 2 MiB by default; the deepest async state machines in xai-grok-shell
+# (attach/adopt bridges, subagent wake) overflow that in a debug build and abort the whole
+# test binary. libtest reads RUST_MIN_STACK at start-up, and cargo applies this to every
+# process it runs, so `cargo test --workspace` gets the room it needs without per-test shims.
+RUST_MIN_STACK = "16777216"
 AARCH64_APPLE_DARWIN_JEMALLOC_SYS_WITH_LG_PAGE = "14"
 AARCH64_UNKNOWN_LINUX_GNU_JEMALLOC_SYS_WITH_LG_PAGE = "16"
 AARCH64_UNKNOWN_LINUX_MUSL_JEMALLOC_SYS_WITH_LG_PAGE = "16"

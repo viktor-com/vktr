@@ -54,11 +54,12 @@ fn resolve_prompt_suggestions_layers(
         .config(config)
         .managed(managed)
         .feature_flag(feature_flag)
-        .default(true)
+        // vktr: every suggestion is an extra model call; against Viktor that is an extra billed agent run.
+        .default(false)
         .resolve()
 }
 
-/// Precedence: requirements, env, user config, managed config, remote, then true.
+/// Precedence: requirements, env, user config, managed config, remote, then false.
 pub fn resolve_prompt_suggestions_enabled(
     requirements: Option<&TomlValue>,
     user: Option<&TomlValue>,
@@ -276,7 +277,9 @@ mod tests {
         };
 
         let resolved = resolve_prompt_suggestions_enabled(None, None, None, Some(&remote));
-        assert!(resolved.value);
+        // Prompt suggestions are off by default in vktr (each would be a billed run), so a malformed
+        // remote payload leaves the default: disabled.
+        assert!(!resolved.value);
         assert_eq!(resolved.source, ConfigSource::Default);
     }
 

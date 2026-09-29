@@ -2063,7 +2063,9 @@ mod tests {
     #[test]
     fn mermaid_view_disk_hit_runs_action_without_dispatch() {
         let mut agent = agent_with_session("hit");
-        let src = "flowchart LR\nA-->B\n".to_string();
+        // A source no sibling test renders: the on-disk cache is keyed by source, theme and width,
+        // and a parallel test rendering the shared snippet would replace the file planted here.
+        let src = "flowchart LR\nA-->DiskHit\n".to_string();
         let theme = crate::theme::cache::current_kind();
         let cols = agent.mermaid_content_cols();
         let (_key, out_path) = agent

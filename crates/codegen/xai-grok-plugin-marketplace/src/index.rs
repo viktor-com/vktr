@@ -288,7 +288,7 @@ mod tests {
         std::fs::create_dir_all(&grok_dir).unwrap();
         std::fs::write(
             grok_dir.join("marketplace.json"),
-            r#"{"name": "grok", "plugins": []}"#,
+            r#"{"name": "vktr", "plugins": []}"#,
         )
         .unwrap();
         let result = load_index(dir.path()).unwrap();

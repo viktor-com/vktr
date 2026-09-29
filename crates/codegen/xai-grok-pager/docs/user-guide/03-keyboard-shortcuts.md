@@ -103,7 +103,7 @@ Switch between the prompt input and scrollback pane.
 
 Four surfaces block the agent on your answer and take over the keyboard while
 they are open: the **question card** (`ask_user_question`), the **MCP
-elicitation card** (`x.ai/mcp/elicit`), the **permission prompt**, and the
+elicitation card**, the **permission prompt**, and the
 **cancel-turn panel**. When more than one is open the permission prompt has the
 keyboard first, then the cancel-turn panel, then question, then elicitation —
 and the shortcuts bar always shows the keys of whichever one is receiving them.
@@ -128,7 +128,7 @@ They share one contract:
   keyboard is parked, the next `Esc` returns to the dashboard, leaving the card
   pending. (`Ctrl+\` still leaves from any state.)
 
-### MCP elicitation card (`x.ai/mcp/elicit`)
+### MCP elicitation card
 
 Shown when an MCP server asks for user input (form fields or URL consent).
 The title always includes the MCP server name.
@@ -177,7 +177,7 @@ Write tab:
 
 | Key | Action |
 |-----|--------|
-| `Enter` | Send the report |
+| `Enter` | Submit the report (saved to the session's `feedback.jsonl`; nothing is sent) |
 | `Tab` | Focus the type/task/failure label rows (shown when a draft supplied them); `Tab` again returns to the report box |
 | `←` / `→` | Pick a value on the focused label row |
 
@@ -189,10 +189,6 @@ Drafts tab:
 | `Enter` | Load the selected draft into Write |
 | `d` | Delete the selected draft (confirm with `y`) |
 | `/` | Search the drafts |
-
-When a trace upload can be offered, `Enter` on the report first shows an upload
-question (`↑`/`↓` choose, `Enter` sends with your choice, `Esc` skips the
-upload and still sends the report).
 
 ### Permission prompt
 
@@ -288,7 +284,7 @@ Actions that affect the agent session, available from the agent screen.
 
 Non-image files insert their absolute path as text instead of a chip.
 
-> **`Alt+V` on Windows** is grok-specific. Windows Terminal's default `Ctrl+V` only pastes plain text and silently drops image clipboards; `Alt+V` bypasses the interceptor. To use `Ctrl+V` for images too, add `{ "command": null, "keys": "ctrl+v" }` to `actions` in your Windows Terminal `settings.json`.
+> **`Alt+V` on Windows** is vktr-specific. Windows Terminal's default `Ctrl+V` only pastes plain text and silently drops image clipboards; `Alt+V` bypasses the interceptor. To use `Ctrl+V` for images too, add `{ "command": null, "keys": "ctrl+v" }` to `actions` in your Windows Terminal `settings.json`.
 
 ### Linux PRIMARY and CLIPBOARD
 
@@ -324,7 +320,7 @@ In `/multiline` mode, `Shift+Enter` (or `Alt+Enter`) sends while plain `Enter` i
 
 Send-now is intentionally interruptive — it reads as "stop what you're doing and take this". To hand the agent a note **without** stopping it, queue with plain `Enter`; the agent picks it up at the next turn boundary.
 
-> **WezTerm**: These modified Enter keys need `enable_kitty_keyboard = true` in your WezTerm config. Full steps and a one-line workaround are in the [terminal support guide](21-terminal-support.md#problem-ctrlenter-doesnt-interject-in-wezterm).
+> **WezTerm**: These modified Enter keys need `enable_kitty_keyboard = true` in your WezTerm config. Full steps and a one-line workaround are in the [terminal support guide](21-terminal-support.md#ctrlenter-does-not-interject-in-wezterm).
 
 > **Windows (non–VS Code family)**: Some consoles drop the `Ctrl` modifier on `Ctrl+Enter` (it can collapse to bare `Enter` or `Ctrl+J`). Use `Ctrl+I` as the alt — letter-key Ctrl chords are stable everywhere. On VS Code family, use **`Ctrl+L`**.
 

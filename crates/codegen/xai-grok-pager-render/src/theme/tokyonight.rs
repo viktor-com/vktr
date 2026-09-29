@@ -141,7 +141,18 @@ pub struct Theme {
     pub md_code_bg: Color,           // Code block background
     pub md_text: Color,              // Default body text (plain paragraphs, strong, emphasis)
     pub link_fg: Color,              // Clickable link text color
+
+    // Wordmark: the pixel cells dither between the two tones and the sweep's core lights in the glint
+    pub brand: Color,
+    pub brand_deep: Color,
+    pub brand_glint: Color,
+    /// Brand-moment gradient stops (the Viktor Hero Gradient in vktr Night/Day), sampled with [`Theme::brand_gradient_at`].
+    /// Stops sit at [`BRAND_GRADIENT_POSITIONS`]; keep it off the wordmark itself (brand rule: the mark is never gradient-filled).
+    pub brand_gradient: [Color; 5],
 }
+
+/// Where the five [`Theme::brand_gradient`] stops sit on `0..=1`: the Hero Gradient's 0 / 45 / 70 / 88 / 100 %.
+pub const BRAND_GRADIENT_POSITIONS: [f32; 5] = [0.0, 0.45, 0.70, 0.88, 1.0];
 
 impl Theme {
     /// TokyoNight Storm theme.
@@ -228,7 +239,31 @@ impl Theme {
             md_code_bg: BG_HIGHLIGHT,
             md_text: FG,
             link_fg: BLUE, // #7aa2f7
+
+            brand: MAGENTA,
+            brand_deep: PURPLE,
+            brand_glint: rgb(255, 255, 255),
+            brand_gradient: [BLUE0, PURPLE, MAGENTA, ORANGE, YELLOW],
         }
+    }
+
+    /// The brand gradient's color at `t` in `0..=1` (clamped).
+    /// Truecolor and 256-color stops interpolate (256-color lands on the nearest cube index); named ANSI stops have no fixed RGB, so they snap to the nearest stop.
+    pub fn brand_gradient_at(&self, t: f32) -> Color {
+        let t = if t.is_finite() { t.clamp(0.0, 1.0) } else { 0.0 };
+        let stops = self.brand_gradient.iter().zip(BRAND_GRADIENT_POSITIONS);
+        let mut prev: Option<(Color, f32)> = None;
+        for (&color, p1) in stops {
+            if let Some((a, p0)) = prev
+                && t <= p1
+            {
+                let f = if p1 > p0 { (t - p0) / (p1 - p0) } else { 1.0 };
+                return crate::render::color::blend_color(a, color, f)
+                    .unwrap_or(if f < 0.5 { a } else { color });
+            }
+            prev = Some((color, p1));
+        }
+        prev.map_or(Color::Reset, |(color, _)| color)
     }
 
     pub const fn fg(&self, color: Color) -> Style {

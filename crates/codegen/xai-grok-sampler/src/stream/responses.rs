@@ -443,12 +443,15 @@ pub(crate) fn stream_responses_tracked<'a>(
                         .as_ref()
                         .map(|e| format!("{}: {}", e.code, e.message))
                         .unwrap_or_else(|| "Response failed with unknown error".to_string());
+                    // vktr: `response.failed` is the server's terminal verdict on the run (Viktor reports a failed
+                    // agent run this way). Resending would start a second run, so the retry loop is vetoed and the
+                    // error is shown as-is.
                     let err = SamplingError::Api {
                         status: reqwest::StatusCode::INTERNAL_SERVER_ERROR,
                         message: error_message,
                         model_metadata: None,
                         retry_after_secs: None,
-                        should_retry: None,
+                        should_retry: Some(false),
                         error_code: response
                             .error
                             .as_ref()

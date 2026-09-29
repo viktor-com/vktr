@@ -9,6 +9,7 @@ fn vision_ok_png_b64() -> String {
     use image::{ImageBuffer, Rgba};
     let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
         ImageBuffer::from_pixel(32, 32, Rgba([128, 64, 32, 255]));
+    use base64::Engine as _;
     let mut buf = Vec::new();
     img.write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Png)
         .expect("encode png");

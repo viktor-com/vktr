@@ -2055,9 +2055,9 @@ enabled = false
     /// This mirrors a real setup: one ClickHouse endpoint, two orgs.
     fn same_url_project_repo() -> tempfile::TempDir {
         let cwd = empty_cwd();
-        std::fs::create_dir_all(cwd.path().join(".grok")).unwrap();
+        std::fs::create_dir_all(cwd.path().join(".vktr")).unwrap();
         std::fs::write(
-            cwd.path().join(".grok").join("config.toml"),
+            cwd.path().join(".vktr").join("config.toml"),
             r#"
 [mcp_servers.gb5207-org1]
 url = "https://dup-url.example.test/mcp"

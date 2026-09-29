@@ -1,3 +1,4 @@
+#![cfg_attr(not(test), allow(dead_code))] // upstream's CDN fetch path is unreachable in vktr but kept for its tests
 //! Changelog fetching from CDN with local disk cache.
 //!
 //! Both markdown (`*.external.md`) and JSON (`*.external.json`) changelogs are published per-version to the CDN at `x.ai/cli/changelogs/`.
@@ -10,7 +11,27 @@
 use std::path::PathBuf;
 
 /// CDN base for all changelogs (proxies to GCS, cache-friendly).
+// vktr ships its changelog inside the binary; the CDN path below is kept for upstream's tests only.
+#[cfg_attr(not(test), allow(dead_code))]
 const CHANGELOG_BASE: &str = "https://x.ai/cli/changelogs";
+/// The repository's `CHANGELOG.md`, embedded at build time.
+const BUNDLED_CHANGELOG: &str = include_str!("../../../../../CHANGELOG.md");
+
+/// Bullets of the newest `## ` section of the bundled changelog, as welcome-screen entries.
+fn bundled_entries() -> Vec<ChangelogEntry> {
+    BUNDLED_CHANGELOG
+        .lines()
+        .skip_while(|line| !line.starts_with("## "))
+        .skip(1)
+        .take_while(|line| !line.starts_with("## "))
+        .filter_map(|line| line.trim().strip_prefix("- "))
+        .map(|text| ChangelogEntry {
+            category: "features".to_owned(),
+            description: text.trim().to_owned(),
+            breaking_change: false,
+        })
+        .collect()
+}
 const FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// A single structured changelog entry from the published JSON changelog. Shape must match the output of `render_external_json` in `changelog.sh`: `{category, description, breaking_change}`
@@ -75,8 +96,11 @@ impl ChangelogManager {
     /// Either field may be `None` if offline with no cache. When `VKTR_CHANGELOG_OFFLINE` is set (PTY / integration tests), the CDN is skipped and only the disk cache is read.
     /// JSON is cached only after a successful parse; the markdown cache is write-through since it's consumed as raw text.
     pub fn fetch(&self) -> Changelog {
-        // Always re-resolve from env so a caller holding an older manager (or a stale OnceLock) still reads the live harness home
-        Self::from_env_home().fetch_with(changelog_offline(), CHANGELOG_BASE)
+        // vktr: never contact a vendor CDN. The changelog is compiled into the binary.
+        Changelog {
+            markdown: Some(BUNDLED_CHANGELOG.to_owned()),
+            entries: Some(bundled_entries()),
+        }
     }
 
     /// Fetch using this manager's already-resolved cache paths, an explicit offline flag, and an explicit CDN base. Split out of [`fetch`] so unit tests can drive it against a temp home without touching process-global env.

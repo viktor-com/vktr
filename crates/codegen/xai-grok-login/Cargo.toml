@@ -23,7 +23,9 @@ backon = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 fs2 = { workspace = true }
-jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+# aws_lc_rs, not rust_crypto: gcloud-auth (via xai-grok-shell) enables jsonwebtoken's default
+# aws_lc_rs, and with two providers compiled in the crate cannot pick one at runtime.
+jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
 obfstr = { workspace = true }
 parking_lot = { workspace = true }
 rand = { workspace = true }

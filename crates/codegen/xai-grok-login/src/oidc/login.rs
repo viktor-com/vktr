@@ -152,10 +152,7 @@ fn parse_callback_params(params: &HashMap<String, String>) -> CallbackResult {
 
 fn callback_response(result: &CallbackResult) -> (StatusCode, Html<String>) {
     let (title, message) = match result {
-        Ok(_) => (
-            "Signed in",
-            "You can close this window and return to vktr.",
-        ),
+        Ok(_) => ("Signed in", "You can close this window and return to vktr."),
         Err(_) => ("Access denied", "Close this window and try again."),
     };
     (
@@ -364,7 +361,7 @@ pub async fn run_login_flow_with_config(
 
     // Ensure jsonwebtoken CryptoProvider is installed (required for JWT validation).
     jsonwebtoken::crypto::CryptoProvider::install_default(
-        &jsonwebtoken::crypto::rust_crypto::DEFAULT_PROVIDER,
+        &jsonwebtoken::crypto::aws_lc::DEFAULT_PROVIDER,
     )
     .ok();
 

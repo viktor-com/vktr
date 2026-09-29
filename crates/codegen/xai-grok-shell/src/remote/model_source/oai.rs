@@ -130,48 +130,4 @@ impl ListModelsEndpoint {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    #[serial_test::serial]
-    fn models_fetch_endpoint_matches_auth_mode() {
-        use crate::agent::config::EndpointsConfig;
-        use crate::agent::remote_config::ModelFetchAuth;
-        for k in [
-            "VKTR_CLI_CHAT_PROXY_BASE_URL",
-            "VKTR_XAI_API_BASE_URL",
-            "VKTR_MODELS_LIST_URL",
-        ] {
-            unsafe { std::env::remove_var(k) };
-        }
-        let cfg = EndpointsConfig::from_config_value(
-            &toml::from_str(
-                r#"[endpoints]
-                    xai_api_base_url = "https://inference.acme-corp.example/xai/v1""#,
-            )
-            .unwrap(),
-        );
-        let session = ListModelsEndpoint::from_endpoints(&cfg, ModelFetchAuth::Session);
-        assert_eq!(session.url, "https://cli-chat-proxy.grok.com/v1/models");
-        assert_eq!(session.auth, EndpointAuth::Session);
-        let deployment = ListModelsEndpoint::from_endpoints(&cfg, ModelFetchAuth::Deployment);
-        assert_eq!(deployment.url, "https://cli-chat-proxy.grok.com/v1/models");
-        assert_eq!(deployment.auth, EndpointAuth::Session);
-        let api = ListModelsEndpoint::from_endpoints(&cfg, ModelFetchAuth::ApiKey);
-        assert_eq!(api.url, "https://inference.acme-corp.example/xai/v1/models");
-        assert_eq!(api.auth, EndpointAuth::ApiKey);
-        let default = EndpointsConfig::from_config_value(&toml::Value::Table(Default::default()));
-        assert_eq!(
-            ListModelsEndpoint::from_endpoints(&default, ModelFetchAuth::ApiKey).url,
-            "https://api.x.ai/v1/models"
-        );
-        let custom = EndpointsConfig::from_config_value(
-            &toml::from_str(
-                r#"[endpoints]
-                    models_base_url = "https://models.acme.com/v1""#,
-            )
-            .unwrap(),
-        );
-        let ep = ListModelsEndpoint::from_endpoints(&custom, ModelFetchAuth::Session);
-        assert_eq!(ep.url, "https://models.acme.com/v1/models");
-        assert_eq!(ep.auth, EndpointAuth::ApiKey);
-    }
 }

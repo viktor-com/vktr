@@ -1572,7 +1572,7 @@ fn resolve_binary_with_home(grok_home: &Path) -> Result<std::path::PathBuf, Conn
 }
 /// Binary file name for the managed vktr install (`vktr` / `grok.exe`).
 fn managed_grok_bin_name() -> &'static str {
-    if cfg!(windows) { "grok.exe" } else { "grok" }
+    if cfg!(windows) { "grok.exe" } else { "vktr" }
 }
 /// Core leader-binary resolution with the current-exe path injected, for testability.
 fn resolve_binary_impl(

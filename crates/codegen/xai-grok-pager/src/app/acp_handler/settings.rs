@@ -114,10 +114,8 @@ pub(super) fn handle_settings_update(notif: &acp::ExtNotification, app: &mut App
     }
     // Env overrides win over live updates too, mirroring the startup resolution in event_loop
     // Otherwise the proxy's explicit `false` (sent as a kill switch) clobbers a local test override moments after launch
-    if let Some(v) = update.privacy_notice_rollout {
-        app.privacy_notice_rollout =
-            xai_grok_config::env_bool("VKTR_PRIVACY_NOTICE_ROLLOUT").unwrap_or(v);
-    }
+    // Never enabled in vktr; see the startup resolution in event_loop.
+    app.privacy_notice_rollout = false;
     if let Some(v) = update.privacy_banner_reshow_days {
         app.privacy_banner_reshow_days = Some(
             std::env::var("VKTR_PRIVACY_BANNER_RESHOW_DAYS")

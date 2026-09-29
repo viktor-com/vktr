@@ -10,8 +10,8 @@ vktr includes six built-in themes, plus an `auto` option that follows your syste
 
 | Theme | Config Names | Description | Truecolor Required |
 |-------|-------------|-------------|--------------------|
-| **GrokNight** | `groknight`, `grok-night`, `dark` | Neutral dark base with a magenta accent. Default theme. Survives quantization cleanly on 256-color and 16-color terminals. | No |
-| **GrokDay** | `grokday`, `grok-day`, `light`, `day` | Light theme for bright terminal backgrounds. | No |
+| **vktr Night** | `vktrnight`, `vktr-night`, `dark`, `night` (old names `groknight`, `grok-night` still work) | Neutral dark base with a magenta accent. Default theme. Survives quantization cleanly on 256-color and 16-color terminals. | No |
+| **vktr Day** | `vktrday`, `vktr-day`, `light`, `day` (old names `grokday`, `grok-day` still work) | Light theme for bright terminal backgrounds. | No |
 | **TokyoNight** | `tokyonight`, `tokyo-night`, `tokyo` | Dark, blue-tinted backgrounds from the Tokyo Night palette. Loses its character when quantized. | Yes |
 | **RosePineMoon** | `rosepine`, `rose-pine`, `rosepine-moon`, `rose-pine-moon` | Muted dark palette with mauve accents, from the Rosé Pine family. | Yes |
 | **OscuraMidnight** | `oscura`, `oscura-midnight` | Deep dark base with purple accents. | Yes |
@@ -32,7 +32,7 @@ theme = "terminal"
 
 Contrast is only as good as your terminal profile: a profile with a very dark bright-black slot will render faint dividers, since vktr derives everything from your palette rather than hard-coding colors.
 
-The theme is rolling out gradually. Until the rollout reaches your account it is hidden from `/theme` and `/settings`, its names do not parse, and a configured `theme = "terminal"` falls back to the default theme. Set `VKTR_TERMINAL_THEME=1` (or `[features] terminal_theme = true` in `config.toml`) to enable it locally ahead of the rollout.
+The theme is off by default. Until you enable it, it is hidden from `/theme` and `/settings`, its names do not parse, and a configured `theme = "terminal"` falls back to the default theme. Set `VKTR_TERMINAL_THEME=1` (or `[features] terminal_theme = true` in `config.toml`) to enable it.
 
 ### Minimal Mode Has No Theming
 
@@ -76,13 +76,13 @@ Set `theme = "auto"` to have vktr follow your operating system's light/dark appe
 theme = "auto"
 ```
 
-By default, dark mode maps to **GrokNight** and light mode maps to **GrokDay**. Override either mapping with `auto_dark_theme` and `auto_light_theme`:
+By default, dark mode maps to **vktr Night** and light mode maps to **vktr Day**. Override either mapping with `auto_dark_theme` and `auto_light_theme`:
 
 ```toml
 [ui]
 theme = "auto"
 auto_dark_theme = "tokyonight"
-auto_light_theme = "grokday"
+auto_light_theme = "vktr-day"
 ```
 
 `theme = "system"` is an alias for `theme = "auto"`.
@@ -128,7 +128,7 @@ Every theme is defined using full RGB values. At startup, vktr quantizes all col
 - On **256-color** terminals, each RGB value is mapped to the nearest indexed palette entry.
 - On **16-color** terminals, colors map to ANSI names.
 
-GrokNight and GrokDay use neutral grays that quantize cleanly. TokyoNight, RosePineMoon, and OscuraMidnight use distinctive tinted backgrounds that lose their character when quantized, which is why the theme picker hides them on non-truecolor terminals.
+vktr Night and vktr Day use neutral grays that quantize cleanly. TokyoNight, RosePineMoon, and OscuraMidnight use distinctive tinted backgrounds that lose their character when quantized, which is why the theme picker hides them on non-truecolor terminals.
 
 ### Runtime-Generated Colors
 
@@ -165,8 +165,8 @@ Use compact mode on small screens to maximize content area.
 
 vktr bundles three `.tmTheme` files for code-block syntax highlighting and selects one based on the active theme:
 
-- `grok-night.tmTheme` -- GrokNight, RosePineMoon, and OscuraMidnight
-- `grok-day.tmTheme` -- GrokDay
+- `grok-night.tmTheme` -- vktr Night, RosePineMoon, and OscuraMidnight
+- `grok-day.tmTheme` -- vktr Day
 - `tokyo-night.tmTheme` -- TokyoNight
 
 vktr selects the matching file automatically when you switch themes. The `.tmTheme` files are built into the binary, so you cannot replace them with your own.

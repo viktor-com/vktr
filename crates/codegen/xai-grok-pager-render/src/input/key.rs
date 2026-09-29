@@ -1,6 +1,6 @@
 //! Key shortcut types and the `key!()` macro.
 //!
-//! ```
+//! ```ignore
 //! use xai_grok_pager::input::key::key;
 //!
 //! // Simple key

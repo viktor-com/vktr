@@ -103,9 +103,9 @@ Rename the current session. Alias: `/title`.
 Switch models. Accepts a model ID or display name (case-insensitive), and for reasoning models you can add an effort level as a second argument. Alias: `/m`.
 
 ```
-/model grok-4.6
-/model Grok 4.6
-/model Reasoning X high
+/model viktor
+/model Viktor
+/model local
 ```
 
 ### `/effort <level>`
@@ -236,6 +236,8 @@ Open the extensions modal on the Skills tab to view installed skills.
 
 ## Media Generation
 
+Image and video generation run on xAI's backend. vktr does not offer these tools unless `VKTR_XAI_BACKED_TOOLS=1`, and they do not work against Viktor.
+
 ### `/imagine <description>`
 
 Generate an image from a text description.
@@ -265,11 +267,13 @@ Run a prompt on a recurring interval. Give the interval as `30m`, `1 hour`, or `
 /loop check deploy status every hour
 ```
 
-Intervals are `Ns` (seconds, minimum 60), `Nm` (minutes), `Nh` (hours), or `Nd` (days); anything under 60 seconds is raised to the minimum. Recurring tasks expire after 7 days, and you can cancel one with `scheduler_delete` using the job ID reported when the loop is created.
+Intervals are `Ns` (seconds, minimum 60), `Nm` (minutes), `Nh` (hours), or `Nd` (days); anything under 60 seconds is raised to the minimum. Recurring tasks expire after 7 days, and you can cancel one with `scheduler_delete` using the job ID reported when the loop is created. The `scheduler_*` tools are left out of vktr's lean default toolset; set `VKTR_FULL_TOOLSET=1` to have them.
 
 ---
 
 ## Workflows and Goals
+
+Workflows and the goal tool are off in vktr's lean default toolset. Set `VKTR_FULL_TOOLSET=1` to get both, or `VKTR_WORKFLOWS=1` (or `[workflows] enabled = true`) for workflows alone.
 
 ### `/goal`
 
@@ -333,7 +337,7 @@ Switch the color theme. Alias: `/t`.
 
 ### `/feedback [message]`
 
-Report an issue or send feedback. Bare `/feedback` opens the feedback form in every mode, including `--minimal`. Its **Write** tab is a report box: `Enter` sends, `Esc` closes. Its **Drafts** tab (`Ctrl+Tab` switches) holds reports saved for later — failed sends and feedback the agent drafted for you — and `Enter` loads one into Write so you can review, pick a type, and send it. `/feedback <message>` sends the message immediately, in any mode; if the send fails, the message is saved to Drafts.
+Write down a note about the session. vktr has no feedback service: the note is kept in the session's `feedback.jsonl` (under `~/.vktr/sessions/`) and is not sent anywhere, and vktr says so when you submit. Bare `/feedback` opens the feedback form in every mode, including `--minimal`. Its **Write** tab is a report box: `Enter` submits, `Esc` closes. Its **Drafts** tab (`Ctrl+Tab` switches) holds reports saved for later, and `Enter` loads one into Write. `/feedback <message>` records the message immediately, in any mode.
 
 ```
 /feedback
@@ -361,20 +365,18 @@ Check the current session for terminal, clipboard, color, input, notification, a
 
 ### `/release-notes`
 
-View release notes for the current version. Alias: `/changelog`.
+View release notes for the current version, compiled into the binary from vktr's `CHANGELOG.md` (nothing is fetched). Alias: `/changelog`.
 
 ### `/docs`
 
-Browse the built-in How-to Guides, open the online Build docs, or jump straight to a guide by title. Aliases: `/howto`, `/guides`.
+Browse the built-in How-to Guides or jump straight to a guide by title. Aliases: `/howto`, `/guides`.
 
 ```
 /docs
-/docs web
 /docs Getting Started
 ```
 
-- Bare `/docs` (or `/docs how-to`) opens the How-to Guides picker.
-- `/docs web` opens https://docs.x.ai/build/overview in your browser.
+- Bare `/docs` (or `/docs how-to`) opens the How-to Guides picker. These guides are vktr's documentation; there is no web copy, so `/docs web` opens the same picker.
 - `/docs <title>` opens a specific guide by case-insensitive title match.
 
 ### `/tutorial`
@@ -407,39 +409,31 @@ Create, edit, and delete personas. A subagent can apply a persona to shape how i
 
 ---
 
-## Account and Billing
+## Account and Usage
 
-### `/login`
+### `/login` and `/logout`
 
-Log in or re-authenticate without leaving the session.
-
-### `/logout`
-
-Log out and return to the login screen.
+vktr uses a Viktor API key instead of an account. `/login` opens the sign-in screen: paste a key, and vktr checks it against Viktor, saves it like `vktr login` does, and continues with it. From the shell, `vktr login` and `vktr logout` manage the saved key (see [Authentication](02-authentication.md)).
 
 ### `/usage`
 
-View credit usage or manage billing. Alias: `/cost`.
+Show the session's context and token totals. Alias: `/cost`.
 
 ```
 /usage
-/usage manage
 ```
 
-Inside a session this opens the usage modal with the account allowance plus that session's context and token totals. From the [Agent Dashboard](23-dashboard.md#dispatch-input) the same modal opens over the dashboard; there is no session there, so only the **Usage limit** tab carries data.
-
-For persisted per-turn token and cost totals of any local session, use `vktr usage <session-id> [turn]` from the shell. See [Session Management](17-sessions.md#the-grok-usage-subcommand).
+For persisted per-turn token and cost totals of any local session, use `vktr usage <session-id> [turn]` from the shell. See [Session Management](17-sessions.md#the-vktr-usage-subcommand).
 
 ### `/privacy`
 
-Open Settings on **Coding data, retention, and training**, where you choose
-**Opt in** or **Opt out**. Takes no arguments.
+Print where vktr sends your data. Takes no arguments.
 
 ```
 /privacy
 ```
 
-This setting doesn't touch `[features] telemetry`, `trace_upload`, or your external OTEL settings — see [Monitoring Usage](24-monitoring-usage.md#related-settings). On team accounts only a team admin can change it, and admins can also enable or disable Zero Data Retention for the team ([how to enable ZDR](https://docs.x.ai/developers/faq/security#how-to-enable-zdr)). When the choice isn't yours to make, the row says so — `ZDR` or `· Admin Managed` — instead of opening the chooser. ZDR locks coding-data sharing; it does not mute external OTEL or `user.email` — see [ZDR and this stream](24-monitoring-usage.md#zdr-and-this-stream).
+In short: prompts, attached files, and tool results go only to the model endpoint you configured (Viktor at `VIKTOR_BASE_URL`, or a `[model.*]` you added). Nothing goes to xAI: no telemetry, no training opt-in, no self-update, no session sharing, no trace upload. `/feedback` and `vktr trace` stay on this machine. Sessions, logs, and your saved API key live under `~/.vktr`. The optional export to your own OpenTelemetry collector is described in [Monitoring Usage](24-monitoring-usage.md).
 
 ---
 

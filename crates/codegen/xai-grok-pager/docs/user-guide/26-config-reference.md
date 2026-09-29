@@ -9,7 +9,7 @@ Three files configure vktr, and they are written by different people.
 | File | Who writes it | Where it lives | Use it to |
 | --- | --- | --- | --- |
 | `config.toml` | The developer | `~/.vktr/config.toml`, and `.vktr/config.toml` in a project | Set personal defaults. Anything here can be changed by the person using the machine. |
-| `managed_config.toml` | You, through the console or a deployment tool | `/etc/grok/managed_config.toml`, or `$VKTR_HOME/managed_config.toml` | Ship a starting point to a fleet. A developer's own file overrides it. |
+| `managed_config.toml` | You, through a deployment tool | `/etc/grok/managed_config.toml`, or `$VKTR_HOME/managed_config.toml` | Ship a starting point to a fleet. A developer's own file overrides it. |
 | `requirements.toml` | You, signed | `/etc/grok/requirements.toml`, macOS device management, or `$VKTR_HOME/requirements.toml` | Set values a developer cannot change. Keys marked `pin` below hold against every other file, the environment, and the command line. |
 
 Choose `managed_config.toml` for defaults you want people to be able to adjust, and `requirements.toml` for the ones you do not.
@@ -17,7 +17,7 @@ Choose `managed_config.toml` for defaults you want people to be able to adjust, 
 vktr also reads these layers, later rows winning except where a requirements pin or the Managed column says otherwise.
 
 1. Compiled defaults.
-2. `/etc/grok/managed_config.toml`, then `$VKTR_HOME/managed_config.toml` (fleet defaults; console-synced).
+2. `/etc/grok/managed_config.toml`, then `$VKTR_HOME/managed_config.toml` (fleet defaults). The `/etc/grok` path is inherited from upstream and kept as-is.
 3. `$VKTR_HOME/config.toml` (your settings; `/settings` writes here). Default `$VKTR_HOME` is `~/.vktr`.
 4. Project `.vktr/config.toml`: only `[mcp_servers]`, `[plugins]`, `[permission]`, and `[mcp] max_output_bytes`.
 5. `VKTR_CONFIG` (inline JSON) or `VKTR_CONFIG_PATH` (JSON or TOML file). Allowlisted keys only.
@@ -49,30 +49,7 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 
 ### `auth`
 
-| Key | Type / Values | Requirements | Managed | Details |
-| --- | --- | --- | --- | --- |
-| `auth` | `table` | `yes` | `user` | Alias of `[grok_com_config]`; every `grok_com_config.*` key also works as `auth.*`. |
-| `auth.auth_provider_command` | `string` | `yes` | `user` | External auth binary; stdout is the token. Also VKTR_AUTH_PROVIDER_COMMAND; also valid as `grok_com_config.auth_provider_command`. |
-| `auth.auth_provider_label` | `string` | `yes` | `user` | Login button label for an external auth provider. Also VKTR_AUTH_PROVIDER_LABEL; also valid as `grok_com_config.auth_provider_label`. |
-| `auth.auth_token_ttl` | `number` | `yes` | `user` | Token TTL in seconds for providers that return a bare token. Also VKTR_AUTH_TOKEN_TTL; also valid as `grok_com_config.auth_token_ttl`. |
-| `auth.disable_api_key_auth` | `boolean` | `pin` | `user` | Refuse API-key auth so only the deployment IdP can log in. Also VKTR_DISABLE_API_KEY_AUTH; also valid as `grok_com_config.disable_api_key_auth`. |
-| `auth.force_login_team_uuid` | `string / string[]` | `pin` | `user` | Require login to this team UUID, or any of an array; empty array fails closed. Also VKTR_FORCE_LOGIN_TEAM_ID; also valid as `grok_com_config.force_login_team_uuid`. |
-| `auth.grok_ws_origin` | `string` | `yes` | `user` | Websocket origin for grok.com. Also VKTR_WS_ORIGIN; also valid as `grok_com_config.grok_ws_origin`. |
-| `auth.grok_ws_url` | `string` | `yes` | `user` | Relay websocket URL. Also VKTR_WS_URL; also valid as `grok_com_config.grok_ws_url`. |
-| `auth.oauth2` | `table` | `yes` | `user` | OAuth2 provider used when enterprise OIDC is unset; also valid as `grok_com_config.oauth2`. |
-| `auth.oauth2.client_id` | `string` | `yes` | `user` | OAuth2 client id. Also VKTR_OAUTH2_CLIENT_ID; also valid as `grok_com_config.oauth2.client_id`. |
-| `auth.oauth2.issuer` | `string` | `yes` | `user` | OAuth2 issuer URL. Also VKTR_OAUTH2_ISSUER; also valid as `grok_com_config.oauth2.issuer`. |
-| `auth.oauth2.principal_id` | `string` | `yes` | `user` | Required principal id when `principal_type` is set. Also VKTR_OAUTH2_PRINCIPAL_ID; also valid as `grok_com_config.oauth2.principal_id`. |
-| `auth.oauth2.principal_type` | `string` | `yes` | `user` | Token principal type, such as Team. Also VKTR_OAUTH2_PRINCIPAL_TYPE; also valid as `grok_com_config.oauth2.principal_type`. |
-| `auth.oauth2.referrer` | `string` | `yes` | `user` | Referrer for OAuth usage attribution. Also VKTR_OAUTH2_REFERRER; also valid as `grok_com_config.oauth2.referrer`. |
-| `auth.oauth2.scopes` | `string[]` | `yes` | `user` | OAuth2 scopes. Also VKTR_OAUTH2_SCOPES; also valid as `grok_com_config.oauth2.scopes`. |
-| `auth.oidc` | `table` | `yes` | `user` | Customer OIDC identity-provider settings; also valid as `grok_com_config.oidc`. |
-| `auth.oidc.audience` | `string` | `yes` | `user` | Optional OIDC audience. Also VKTR_OIDC_AUDIENCE; also valid as `grok_com_config.oidc.audience`. |
-| `auth.oidc.client_id` | `string` | `yes` | `user` | OIDC client id. Also VKTR_OIDC_CLIENT_ID; also valid as `grok_com_config.oidc.client_id`. |
-| `auth.oidc.issuer` | `string` | `yes` | `user` | OIDC issuer URL. Also VKTR_OIDC_ISSUER; also valid as `grok_com_config.oidc.issuer`. |
-| `auth.oidc.scopes` | `string[]` | `yes` | `user` | OIDC scopes. Also VKTR_OIDC_SCOPES; also valid as `grok_com_config.oidc.scopes`. |
-| `auth.preferred_method` | `api_key / oidc` | `yes` | `user` | Pin automatic auth to one method with no fallthrough; also valid as `grok_com_config.preferred_method`. |
-| `auth.token_header` | `string` | `yes` | `user` | Header name that carries the CLI auth token; default `xai-grok-cli`; also valid as `grok_com_config.token_header`. |
+vktr authenticates with a Viktor API key only (`VIKTOR_API_KEY`, or `[model.viktor] api_key` written by `vktr login`; see [Authentication](02-authentication.md)). Upstream's `[auth]` table (alias `[grok_com_config]`) configured xAI account login: OAuth2, OIDC, external auth-provider commands, team pinning, and the relay websocket. Browser, OIDC and device-code login are refused in vktr, so these keys are not supported and are not listed here.
 
 ### `auth_provider`
 
@@ -96,22 +73,19 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 
 | Key | Type / Values | Requirements | Managed | Details |
 | --- | --- | --- | --- | --- |
-| `cli.auto_update` | `boolean` | `pin` | `user` | Check for CLI updates on launch. Also VKTR_DISABLE_AUTOUPDATER to suppress. |
-| `cli.channel` | `stable / alpha` | `pin` | `user` | Release channel preference. |
-| `cli.grove` | `boolean` or `grove` / `grove-fuse` / `grove-nfs` / `nfs` / `all` / `copy` / `true` / `false` / `1` / `0` / `on` / `off` | `yes` | `user` | Convenience that turns **both** `vktr clone` and session / `-w` Grove on when the specific knobs are unset. Also `VKTR_GROVE`. `false` / `copy` / `off` means enable-all is off (fall through); it does not force both surfaces off. `[cli] grove_worktree` and `VKTR_WORKTREE_TYPE` still win for worktrees; `VKTR_CLONE` still wins for clone. Remote `grove_worktree = false` still kills worktrees only. |
-| `cli.grove_worktree` | `boolean` or `grove` / `grove-fuse` / `grove-nfs` / `nfs` / `copy` / `true` / `false` / `1` / `0` / `on` / `off` | `yes` | `user` | Session / `-w` Grove vs copy. Default copy. Distinct from creation-mode `cli.worktree_type`. Also `VKTR_WORKTREE_TYPE`. Layer order: request → env → local → enable-all (`VKTR_GROVE` / `[cli] grove`) → remote-true; then kill last: remote `grove_worktree = false` → copy (`remote_kill`). Missing remote settings are not a kill: local/env/request/enable-all still apply. Does not enable `vktr clone`. |
-| `cli.installer` | `string` | `—` | `user` | Which installer last set up this CLI, used to pick the update path. |
-| `cli.maximum_version` | `string` | `pin` | `user` | Highest CLI version that still runs without a hard block. Also VKTR_MAXIMUM_VERSION. |
-| `cli.minimum_version` | `string` | `pin` | `user` | Lowest CLI version that still runs without a hard block. Also VKTR_MINIMUM_VERSION. |
-| `cli.npm_registry` | `string` | `yes` | `user` | npm registry used by the auto-updater. |
-| `cli.nfs_worktree` | same as `cli.grove_worktree` | `yes` | `user` | Read alias of `cli.grove_worktree`. |
+| `cli.auto_update` | `boolean` | `pin` | `user` | No effect: vktr never updates itself. |
+| `cli.channel` | `stable / alpha` | `pin` | `user` | No effect: vktr has no release channel. |
+| `cli.installer` | `string` | `—` | `user` | Which installer last set up this CLI. |
+| `cli.maximum_version` | `string` | `pin` | `user` | Soft ceiling for the upstream updater; no effect in vktr, which never updates itself. Also VKTR_MAXIMUM_VERSION. |
+| `cli.minimum_version` | `string` | `pin` | `user` | Soft floor for the upstream updater; no effect in vktr, which never updates itself. Also VKTR_MINIMUM_VERSION. |
+| `cli.npm_registry` | `string` | `yes` | `user` | npm registry used by the upstream auto-updater; no effect in vktr. |
 | `cli.required_maximum_version` | `string` | `pin` | `user` | Hard maximum CLI version. Also VKTR_REQUIRED_MAXIMUM_VERSION. |
 | `cli.required_minimum_version` | `string` | `pin` | `user` | Hard minimum CLI version. Also VKTR_REQUIRED_MINIMUM_VERSION. |
 | `cli.session_picker_grouped` | `boolean` | `yes` | `user` | Group sessions by repo in the picker and CLI listings. |
 | `cli.session_registry` | `boolean` | `yes` | `user` | Participate in the cross-process session registry. |
 | `cli.show_tips` | `boolean` | `pin` | `user` | Startup tips. |
 | `cli.use_leader` | `boolean` | `pin` | `user` | Use the leader process for config reload and MCP watches. |
-| `cli.worktree_type` | `string` | `yes` | `user` | Creation-mode when set to `linked`, `standalone`, or `git`. The spellings `grove`, `grove-fuse`, `grove-nfs`, `nfs`, and `copy` also feed the session / `-w` Grove gate (same as `cli.grove_worktree`); they are not creation-mode values. |
+| `cli.worktree_type` | `string` | `yes` | `user` | Worktree creation mode: `linked`, `standalone`, or `git`. (Upstream's Grove spellings are not available in vktr; see [vktr clone](27-grok-clone.md).) |
 
 ### `compat`
 
@@ -153,7 +127,7 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 
 | Key | Type / Values | Requirements | Managed | Details |
 | --- | --- | --- | --- | --- |
-| `disable_web_search` | `boolean` | `yes` | `user` | Drop the web_search tool for this process. Also `--disable-web-search`. |
+| `disable_web_search` | `boolean` | `yes` | `user` | Drop the web_search tool for this process (already off unless `VKTR_XAI_BACKED_TOOLS=1`). Also `--disable-web-search`. |
 
 ### `disabled_mcp_servers`
 
@@ -177,19 +151,15 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 
 | Key | Type / Values | Requirements | Managed | Details |
 | --- | --- | --- | --- | --- |
-| `endpoints.cli_chat_proxy_base_url` | `string` | `pin` | `user` | Session-service API base URL. |
-| `endpoints.deployment_key` | `string` | `pin` | `user` | Management key for enterprise deployments. Also VKTR_DEPLOYMENT_KEY. |
-| `endpoints.feedback_base_url` | `string` | `yes` | `user` | Where feedback submissions go. Also VKTR_FEEDBACK_BASE_URL. |
-| `endpoints.managed_config_url` | `string` | `yes` | `user` | Override managed config endpoint. Also VKTR_MANAGED_CONFIG_URL. |
-| `endpoints.models_base_url` | `string` | `pin` | `user` | Custom inference base URL. Also VKTR_MODELS_BASE_URL. |
+| `endpoints.viktor_base_url` | `string` | `yes` | `user` | Viktor compat API base URL; default `https://api.viktor.com/api/compat/v1`. Also VIKTOR_BASE_URL. |
+| `endpoints.cli_chat_proxy_base_url` | `string` | `pin` | `user` | Upstream session-service API base URL; defaults to the Viktor base URL. Also VKTR_CLI_CHAT_PROXY_BASE_URL. |
+| `endpoints.deployment_key` | `string` | `pin` | `user` | Upstream management key for xAI enterprise deployments. Also VKTR_DEPLOYMENT_KEY. |
+| `endpoints.feedback_base_url` | `string` | `yes` | `user` | Upstream feedback service URL. vktr has no feedback service: `/feedback` saves to the session's `feedback.jsonl`. Also VKTR_FEEDBACK_BASE_URL. |
+| `endpoints.managed_config_url` | `string` | `yes` | `user` | Managed-config fetch endpoint (fetching is off by default). Also VKTR_MANAGED_CONFIG_URL. |
+| `endpoints.models_base_url` | `string` | `pin` | `user` | Custom inference base URL; its `/models` list replaces the built-in catalog. Also VKTR_MODELS_BASE_URL. |
 | `endpoints.models_list_url` | `string` | `pin` | `user` | Override model-list URL. Also VKTR_MODELS_LIST_URL. Alias `models_endpoint`. |
-| `endpoints.trace_upload_bucket` | `string` | `yes` | `user` | Direct gs:// or s3:// bucket for traces; bypasses the proxy. Also VKTR_TRACE_UPLOAD_BUCKET. |
-| `endpoints.trace_upload_credentials` | `string` | `yes` | `user` | Inline GCS service-account JSON or AWS credentials for that bucket; wins over `trace_upload_credentials_file` and has no environment variable. |
-| `endpoints.trace_upload_credentials_file` | `string (path)` | `yes` | `user` | Path to a GCS service-account JSON or AWS credentials file for that bucket. Also VKTR_TRACE_UPLOAD_CREDENTIALS_FILE. |
-| `endpoints.trace_upload_endpoint_url` | `string` | `yes` | `user` | Custom S3-compatible endpoint for s3:// bucket uploads. Also VKTR_TRACE_UPLOAD_ENDPOINT_URL. |
-| `endpoints.trace_upload_region` | `string` | `yes` | `user` | AWS region for s3:// bucket uploads; default us-east-1. Also VKTR_TRACE_UPLOAD_REGION. |
-| `endpoints.trace_upload_url` | `string` | `pin` | `user` | Proxy destination for traces when no direct bucket is set. Also VKTR_TRACE_UPLOAD_URL. |
-| `endpoints.xai_api_base_url` | `string` | `pin` | `user` | Public xAI API base. Also VKTR_XAI_API_BASE_URL. |
+| `endpoints.trace_upload_*` | | `yes` | `user` | Upstream trace-upload destinations. `vktr trace` always exports locally. |
+| `endpoints.xai_api_base_url` | `string` | `pin` | `user` | Upstream public API base; defaults to the Viktor base URL. Also VKTR_XAI_API_BASE_URL. |
 
 ### `features`
 
@@ -207,13 +177,12 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 | `features.compaction_tool_choice` | `string` | `yes` | `user` | Tool-choice hint used during compaction. |
 | `features.compaction_verbatim_input` | `boolean` | `pin` | `user` | Enable or disable `compaction_verbatim_input`. Default true. Also `VKTR_COMPACTION_VERBATIM_INPUT`. |
 | `features.dock` | `boolean` | `pin` | `user` | Enable or disable `dock`. Default false. Also `VKTR_DOCK`. |
-| `features.feedback` | `boolean` | `pin` | `user` | Enable or disable `feedback`. Default true. Also `VKTR_FEEDBACK_ENABLED`. |
-| `features.feedback_trace_card` | `boolean` | `pin` | `user` | Show a trace-upload consent question after `/feedback`. Default false. Also `VKTR_FEEDBACK_TRACE_CARD`. |
-| `features.image_edit_model_override` | `string` | `yes` | `user` | Imagine model id for image_edit. |
-| `features.image_gen` | `boolean` | `pin` | `user` | Enable image_gen / `/imagine`. |
-| `features.image_gen_model_override` | `string` | `yes` | `user` | Imagine model id for image_gen. Empty defers to the remotely configured default. |
+| `features.feedback` | `boolean` | `pin` | `user` | Enable or disable `/feedback`. Default true. Notes are saved to the session's `feedback.jsonl`, never sent. Also `VKTR_FEEDBACK_ENABLED`. |
+| `features.image_edit_model_override` | `string` | `yes` | `user` | Model id for image_edit (xAI-backed; needs `VKTR_XAI_BACKED_TOOLS=1`). |
+| `features.image_gen` | `boolean` | `pin` | `user` | Enable image_gen / `/imagine`. xAI-backed: offered only with `VKTR_XAI_BACKED_TOOLS=1`, and does not work against Viktor. |
+| `features.image_gen_model_override` | `string` | `yes` | `user` | Model id for image_gen (xAI-backed). |
 | `features.lsp_tools` | `boolean` | `pin` | `user` | Enable or disable `lsp_tools`. Default false. Also `VKTR_LSP_TOOLS`. |
-| `features.managed_config` | `boolean` | `yes` | `user` | Fetch managed_config.toml and requirements.toml from the deployment. |
+| `features.managed_config` | `boolean` | `yes` | `user` | Fetch managed_config.toml and requirements.toml from a deployment. Off by default in vktr. |
 | `features.mcp_auto_restart` | `boolean` | `yes` | `user` | Auto-restart stdio MCP servers after transport failure. Also VKTR_MCP_AUTO_RESTART. |
 | `features.mcp_liveness_watchers` | `boolean` | `yes` | `user` | Poll MCP transports and push server_status updates. Emergency kill switch when false. |
 | `features.mcp_push_server_status` | `boolean` | `yes` | `user` | Pager subscribes to MCP server_status push. Process env VKTR_MCP_PUSH_SERVER_STATUS wins at launch. |
@@ -221,21 +190,21 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 | `features.non_git_warning` | `boolean` | `yes` | `user` | Show a blocking warning when vktr starts outside a Git repository. |
 | `features.remember_mode` | `boolean` | `—` | `—` | Remember the last permission mode across sessions. Read from user `config.toml` only. |
 | `features.remote_fetch` | `boolean` | `pin` | `fleet` | Pin remote model-catalog and asset fetch. Managed wins over the user file when both set. |
-| `features.session_recap` | `boolean` | `pin` | `user` | Enable or disable `session_recap`. Default true. Also `VKTR_SESSION_RECAP`. |
+| `features.session_recap` | `boolean` | `pin` | `user` | Enable or disable `session_recap`. Default false in vktr (each recap is an extra model request). Also `VKTR_SESSION_RECAP`. |
 | `features.session_search` | `boolean` | `pin` | `user` | Enable or disable `session_search`. Default true. Also `VKTR_SESSION_SEARCH`. |
 | `features.subagent_model_inheritance` | `boolean` | `pin` | `user` | Hide the subagent `model` argument when every model you can pick is an xAI model, so subagents inherit the parent's model. Default false. Also `VKTR_SUBAGENT_MODEL_INHERITANCE`. Read when a session starts; changing it requires a restart. |
 | `features.subagent_worktree_snapshot` | `boolean` | `pin` | `user` | Enable or disable `subagent_worktree_snapshot`. Default false. Also `VKTR_SUBAGENT_WORKTREE_SNAPSHOT`. |
 | `features.support_permission` | `boolean` | `yes` | `user` | Allow the agent to ask permission for tool executions. |
-| `features.telemetry` | `boolean / session_metrics / off` | `pin` | `user` | Product telemetry mode. Enterprise default is off. |
+| `features.telemetry` | `boolean / session_metrics / off` | `pin` | `user` | Upstream product telemetry mode. vktr sends no product telemetry. |
 | `features.terminal_theme` | `boolean` | `pin` | `user` | Reveal the terminal-native `terminal` color theme during its rollout. Default false. Also `VKTR_TERMINAL_THEME`. |
 | `features.title_refresh` | `boolean` | `pin` | `user` | Early-session auto-title refresh. Pin this in requirements to beat VKTR_TITLE_REFRESH. |
-| `features.turn_summary` | `boolean` | `pin` | `user` | Enable or disable `turn_summary`. Default true. Also `VKTR_TURN_SUMMARY`. |
+| `features.turn_summary` | `boolean` | `pin` | `user` | Enable or disable `turn_summary`. Default false in vktr (each summary is an extra model request). Also `VKTR_TURN_SUMMARY`. |
 | `features.two_pass_compaction` | `boolean` | `pin` | `user` | Enable or disable `two_pass_compaction`. Default true. Also `VKTR_TWO_PASS_COMPACTION`. |
-| `features.video_gen` | `boolean` | `pin` | `user` | Enable video tools / `/imagine-video`. |
+| `features.video_gen` | `boolean` | `pin` | `user` | Enable video tools / `/imagine-video`. xAI-backed: offered only with `VKTR_XAI_BACKED_TOOLS=1`. |
 | `features.voice_mode` | `boolean` | `pin` | `user` | Enable or disable `voice_mode`. Default true. Also `VKTR_VOICE_MODE`. |
 | `features.web_fetch` | `boolean` | `pin` | `user` | Enable or disable `web_fetch`. Default false. Also `VKTR_WEB_FETCH`. |
 | `features.write_file` | `boolean` | `pin` | `user` | Enable or disable `write_file`. Default true. Also `VKTR_WRITE_FILE`. |
-| `features.zdr_access_enabled` | `boolean` | `pin` | `user` | Advertise ZDR-incompatible tools when the team is on Zero Data Retention. Also `VKTR_ZDR_ACCESS_ENABLED`. |
+| `features.zdr_access_enabled` | `boolean` | `pin` | `user` | Upstream xAI Zero Data Retention setting. Also `VKTR_ZDR_ACCESS_ENABLED`. |
 
 ### `feedback`
 
@@ -249,40 +218,17 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 
 | Key | Type / Values | Requirements | Managed | Details |
 | --- | --- | --- | --- | --- |
-| `goal.enabled` | `boolean` | `yes` | `user` | Enable `/goal`. |
+| `goal.enabled` | `boolean` | `yes` | `user` | Enable `/goal`. The goal tool is left out of the lean default toolset; `VKTR_FULL_TOOLSET=1` restores it. |
 
 ### `grok_com_config`
 
-| Key | Type / Values | Requirements | Managed | Details |
-| --- | --- | --- | --- | --- |
-| `grok_com_config` | `table` | `yes` | `user` | vktr.com websocket and OAuth/OIDC settings. `[auth]` is an alias. |
-| `grok_com_config.auth_provider_command` | `string` | `yes` | `user` | External auth binary; stdout is the token. Also VKTR_AUTH_PROVIDER_COMMAND. |
-| `grok_com_config.auth_provider_label` | `string` | `yes` | `user` | Login button label for an external auth provider. Also VKTR_AUTH_PROVIDER_LABEL. |
-| `grok_com_config.auth_token_ttl` | `number` | `yes` | `user` | Token TTL in seconds for providers that return a bare token. Also VKTR_AUTH_TOKEN_TTL. |
-| `grok_com_config.disable_api_key_auth` | `boolean` | `pin` | `user` | Refuse API-key auth so only the deployment IdP can log in. Also VKTR_DISABLE_API_KEY_AUTH. |
-| `grok_com_config.force_login_team_uuid` | `string / string[]` | `pin` | `user` | Require login to this team UUID, or any of an array; empty array fails closed. Also VKTR_FORCE_LOGIN_TEAM_ID. |
-| `grok_com_config.grok_ws_origin` | `string` | `yes` | `user` | Websocket origin for grok.com. Also VKTR_WS_ORIGIN. |
-| `grok_com_config.grok_ws_url` | `string` | `yes` | `user` | Relay websocket URL. Also VKTR_WS_URL. |
-| `grok_com_config.oauth2` | `table` | `yes` | `user` | OAuth2 provider used when enterprise OIDC is unset. |
-| `grok_com_config.oauth2.client_id` | `string` | `yes` | `user` | OAuth2 client id. Also VKTR_OAUTH2_CLIENT_ID. |
-| `grok_com_config.oauth2.issuer` | `string` | `yes` | `user` | OAuth2 issuer URL. Also VKTR_OAUTH2_ISSUER. |
-| `grok_com_config.oauth2.principal_id` | `string` | `yes` | `user` | Required principal id when `principal_type` is set. Also VKTR_OAUTH2_PRINCIPAL_ID. |
-| `grok_com_config.oauth2.principal_type` | `string` | `yes` | `user` | Token principal type, such as Team. Also VKTR_OAUTH2_PRINCIPAL_TYPE. |
-| `grok_com_config.oauth2.referrer` | `string` | `yes` | `user` | Referrer for OAuth usage attribution. Also VKTR_OAUTH2_REFERRER. |
-| `grok_com_config.oauth2.scopes` | `string[]` | `yes` | `user` | OAuth2 scopes. Also VKTR_OAUTH2_SCOPES. |
-| `grok_com_config.oidc` | `table` | `yes` | `user` | Customer OIDC identity-provider settings. |
-| `grok_com_config.oidc.audience` | `string` | `yes` | `user` | Optional OIDC audience. Also VKTR_OIDC_AUDIENCE. |
-| `grok_com_config.oidc.client_id` | `string` | `yes` | `user` | OIDC client id. Also VKTR_OIDC_CLIENT_ID. |
-| `grok_com_config.oidc.issuer` | `string` | `yes` | `user` | OIDC issuer URL. Also VKTR_OIDC_ISSUER. |
-| `grok_com_config.oidc.scopes` | `string[]` | `yes` | `user` | OIDC scopes. Also VKTR_OIDC_SCOPES. |
-| `grok_com_config.preferred_method` | `api_key / oidc` | `yes` | `user` | Pin automatic auth to one method with no fallthrough. |
-| `grok_com_config.token_header` | `string` | `yes` | `user` | Header name that carries the CLI auth token; default `xai-grok-cli`. |
+Alias of `[auth]`; not supported in vktr (see [`auth`](#auth)).
 
 ### `harness`
 
 | Key | Type / Values | Requirements | Managed | Details |
 | --- | --- | --- | --- | --- |
-| `harness.wait_for_uploads` | `boolean` | `yes` | `user` | Wait for turn-end trace uploads before returning the prompt response. Off by default; one-shot headless runs instead drain pending turn-end uploads at exit within a mandatory minimum budget (about 150s: the parse window plus one upload attempt) that `upload_flush_timeout_secs`, when larger, extends. |
+| `harness.wait_for_uploads` | `boolean` | `yes` | `user` | Upstream: wait for turn-end trace uploads. vktr uploads no traces. |
 | `harness.disable_workspace_teleport` | `boolean` | `pin` | `user` | Kill switch for per-turn workspace snapshots. |
 
 ### `hints`
@@ -366,7 +312,7 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 | `model.<id>` | `table` | `yes` | `user` | Per-model override or BYOK definition. Prefer `env_key` over inline `api_key`. |
 | `model.<id>.agent_type` | `string` | `yes` | `user` | Agent definition type associated with this model. |
 | `model.<id>.api_backend` | `chat_completions / responses / messages` | `yes` | `user` | Wire protocol for this model. |
-| `model.<id>.api_base_url` | `string` | `yes` | `user` | Alternate API base used with XAI_API_KEY resolution. |
+| `model.<id>.api_base_url` | `string` | `yes` | `user` | Alternate API base used when the key comes from the global `VIKTOR_API_KEY`. |
 | `model.<id>.api_key` | `string` | `yes` | `user` | Inline API key. Prefer `env_key`. Not a secret to put in a shared repo. |
 | `model.<id>.auth_provider` | `string` | `yes` | `user` | Name of a `[auth_provider.<name>]` helper that mints this model's bearer token. |
 | `model.<id>.auto_compact_threshold_percent` | `integer` | `yes` | `user` | Per-model auto-compact threshold (0-100). |
@@ -396,7 +342,7 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 | `model.<id>.stream_tool_calls` | `boolean` | `yes` | `user` | Per-model tool-call streaming request shape. |
 | `model.<id>.subagent_rate_limit_max_attempts` | `number` | `yes` | `user` | Maximum subagent 429 wait-loop attempts when `rate_limit_retry_threshold` is unset; default 8, maximum 32, and `0` disables the wait loop. |
 | `model.<id>.supported_in_api` | `boolean` | `yes` | `user` | Whether this catalog entry is offered as a public API model. |
-| `model.<id>.supports_backend_search` | `boolean` | `yes` | `user` | Whether the endpoint supports Grok-hosted server-side search tools. |
+| `model.<id>.supports_backend_search` | `boolean` | `yes` | `user` | Whether the endpoint supports xAI-hosted server-side search tools. False for `viktor`. |
 | `model.<id>.supports_reasoning_effort` | `boolean` | `yes` | `user` | Deprecated; prefer `reasoning_efforts`. |
 | `model.<id>.system_prompt_label` | `string` | `yes` | `user` | Per-model system-prompt identity label. |
 | `model.<id>.temperature` | `number` | `yes` | `user` | Per-model sampling temperature. |
@@ -415,7 +361,7 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 | --- | --- | --- | --- | --- |
 | `models.agent_type` | `string` | `yes` | `user` | Fallback agent_type for models without a per-model override. |
 | `models.allowed_models` | `string[]` | `pin` | `user` | Glob allowlist for the model picker, default, and `-m`. Empty means no restriction. |
-| `models.default` | `string` | `pin` | `user` | Model used for new sessions. Also `VKTR_DEFAULT_MODEL`, `--model`, `-m`. |
+| `models.default` | `string` | `pin` | `user` | Model used for new sessions; default `viktor`. Also `VKTR_DEFAULT_MODEL`, `--model`, `-m`. |
 | `models.default_reasoning_effort` | `string` | `yes` | `user` | Default reasoning effort for the default model when the model supports it. |
 | `models.disabled_models` | `string[]` | `yes` | `user` | Remove these model IDs from the catalog. Wins over `hidden_models`. |
 | `models.extra_headers` | `map<string,string>` | `yes` | `user` | Request headers applied to every model; per-model keys win. |
@@ -426,12 +372,12 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 | `models.max_retries` | `number` | `yes` | `user` | Global inference retry default when a model leaves it unset. |
 | `models.prompt_suggestion` | `string` | `yes` | `user` | Model pin for next-prompt ghost text. Unset falls through remote, then the session model. |
 | `models.rate_limit_retry_threshold` | `number` | `yes` | `user` | Global total-attempt ceiling for rate-limited requests when a model leaves it unset, capped by the resolved `max_retries`; when configured, it disables the separate subagent 429 wait loop. |
-| `models.session_summary` | `string` | `yes` | `user` | Model used for session titles and summaries. |
+| `models.session_summary` | `string` | `yes` | `user` | Model used for session titles and summaries (LLM titles are off unless `VKTR_LLM_SESSION_TITLES=1`). |
 | `models.stream_tool_calls` | `boolean` | `yes` | `user` | Global tool-call streaming request shape; some BYOK endpoints need false. |
 | `models.subagent_rate_limit_max_attempts` | `number` | `yes` | `user` | Global default for subagent 429 wait-loop attempts when `rate_limit_retry_threshold` is unset; default 8, maximum 32, and `0` disables the wait loop. |
 | `models.temperature` | `number` | `yes` | `user` | Global sampling temperature default when a model leaves it unset. |
 | `models.top_p` | `number` | `yes` | `user` | Global top_p default when a model leaves it unset. |
-| `models.web_search` | `string` | `pin` | `user` | Model used by the client `web_search` tool. Also `VKTR_WEB_SEARCH_MODEL`. |
+| `models.web_search` | `string` | `pin` | `user` | Model used by the xAI-backed `web_search` tool (off unless `VKTR_XAI_BACKED_TOOLS=1`). Also `VKTR_WEB_SEARCH_MODEL`. |
 
 ### `path_not_found_hints`
 
@@ -473,7 +419,7 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 
 | Key | Type / Values | Requirements | Managed | Details |
 | --- | --- | --- | --- | --- |
-| `relay.enabled` | `boolean` | `yes` | `user` | Enable session relay sync. |
+| `relay.enabled` | `boolean` | `yes` | `user` | Upstream session relay sync; vktr provides no relay. |
 
 ### `sandbox`
 
@@ -516,7 +462,7 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 
 | Key | Type / Values | Requirements | Managed | Details |
 | --- | --- | --- | --- | --- |
-| `subagents.enabled` | `boolean` | `pin` | `user` | Subagent / task tool master switch. Also VKTR_SUBAGENTS. |
+| `subagents.enabled` | `boolean` | `pin` | `user` | Subagent / task tool master switch. Default off in vktr. Also VKTR_SUBAGENTS and VKTR_FULL_TOOLSET. |
 | `subagents.limit_behavior` | `queue / fail` | `yes` | `user` | What to do when the concurrent subagent cap is hit. |
 | `subagents.max_concurrent` | `integer` | `yes` | `user` | Max concurrent subagents. |
 | `subagents.max_depth` | `integer` | `yes` | `user` | Max nested subagent depth (clamped ≥1). |
@@ -552,17 +498,17 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 | `telemetry.otel_log_tool_details` | `boolean` | `pin` | `user` | Metadata gate for tool-arg preview, paths, and verbatim names. Recommended on for SIEM join. Also OTEL_LOG_TOOL_DETAILS. Does not include full bodies. |
 | `telemetry.otel_log_assistant_responses` | `boolean` | `pin` | `user` | Content gate for grok_code.assistant_response text. Unset follows otel_log_user_prompts unless a sibling gate is pinned in requirements. Env-only OTEL_LOG_USER_PROMPTS=1 must set this to 0 (or pin it false) for a prompts-only stream. Also OTEL_LOG_ASSISTANT_RESPONSES. |
 | `telemetry.otel_log_tool_content` | `boolean` | `pin` | `user` | Body gate for tool_input, tool_output, full_command, and error_message. Independent of details; default off. CONTENT-only loses verbatim MCP names and paths. Also OTEL_LOG_TOOL_CONTENT. |
-| `telemetry.trace_upload` | `boolean` | `pin` | `user` | Upload session traces. Requirements pin beats user config. |
+| `telemetry.trace_upload` | `boolean` | `pin` | `user` | Upstream session-trace upload. vktr uploads no traces; `vktr trace` exports locally. |
 
 ### `tools`
 
 | Key | Type / Values | Requirements | Managed | Details |
 | --- | --- | --- | --- | --- |
-| `tools.disable_zdr_incompatible_tools` | `boolean` | `yes` | `user` | Restrict tools that need xAI-hosted output under ZDR. Also VKTR_DISABLE_ZDR_INCOMPATIBLE_TOOLS. |
+| `tools.disable_zdr_incompatible_tools` | `boolean` | `yes` | `user` | Upstream xAI ZDR setting. Also VKTR_DISABLE_ZDR_INCOMPATIBLE_TOOLS. |
 | `tools.media_gen.max_parallel_image_gen_calls` | `integer` | `yes` | `user` | Cap parallel image_gen/image_edit calls in one model step. Also VKTR_MAX_PARALLEL_IMAGE_GEN_CALLS. |
 | `tools.media_gen.max_parallel_video_gen_calls` | `integer` | `yes` | `user` | Cap parallel video_gen calls in one model step. Also VKTR_MAX_PARALLEL_VIDEO_GEN_CALLS. |
 | `tools.respect_gitignore` | `boolean` | `pin` | `user` | When true, search and read tools skip gitignored files. Also VKTR_RESPECT_GITIGNORE. |
-| `tools.zdr_video_output_s3` | `table` | `yes` | `user` | Team S3 bucket for ZDR video output. See ZDR Video Storage. |
+| `tools.zdr_video_output_s3` | `table` | `yes` | `user` | Upstream xAI ZDR video storage. |
 
 ### `toolset`
 
@@ -577,8 +523,8 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 | `toolset.file_toolset` | `standard / hashline` | `yes` | `user` | File edit tool scheme. |
 | `toolset.web_fetch.allowed_domains` | `string[]` | `yes` | `user` | Domain allowlist override for web_fetch. |
 | `toolset.web_fetch.proxy_endpoint` | `string` | `yes` | `user` | Egress proxy URL for web_fetch. Also VKTR_WEB_FETCH_PROXY. |
-| `toolset.web_search.allowed_domains` | `string[]` | `yes` | `user` | Domain allowlist for client web_search. Overlay-allowlisted. |
-| `toolset.web_search.excluded_domains` | `string[]` | `yes` | `user` | Domain denylist for client web_search. Overlay-allowlisted. |
+| `toolset.web_search.allowed_domains` | `string[]` | `yes` | `user` | Domain allowlist for the xAI-backed web_search. Overlay-allowlisted. |
+| `toolset.web_search.excluded_domains` | `string[]` | `yes` | `user` | Domain denylist for the xAI-backed web_search. Overlay-allowlisted. |
 
 ### `ui`
 
@@ -613,7 +559,7 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 | `ui.mouse_reporting_toggle` | `boolean` | `yes` | `user` | Ctrl+R in scrollback toggles terminal mouse capture. Also VKTR_MOUSE_REPORTING_TOGGLE. |
 | `ui.page_flip_on_send` | `boolean` | `yes` | `user` | Snap the sent prompt to the top of the viewport. |
 | `ui.permission_mode` | `default / ask / auto / always-approve` | `yes` | `user` | Default tool-permission behavior. Enterprise locks use requirements.toml. |
-| `ui.prompt_suggestions` | `boolean` | `yes` | `user` | Next-prompt ghost text after each turn. Also VKTR_PROMPT_SUGGESTIONS; a remote kill-switch can disable it fleet-wide. |
+| `ui.prompt_suggestions` | `boolean` | `yes` | `user` | Next-prompt ghost text after each turn. Default off in vktr (each suggestion is an extra model request). Also VKTR_PROMPT_SUGGESTIONS. |
 | `prompt_suggestions.max_output_tokens` | `number` | `yes` | `user` | Visible-output tokens for the suggestion call; clamped to 16–256, default 64, with a separate reserve for reasoning. Remote-overridable. |
 | `prompt_suggestions.temperature` | `number` | `yes` | `user` | Sampling temperature for the suggestion call (default 0.2). Remote-overridable. |
 | `prompt_suggestions.reasoning_effort` | `none / minimal / low / medium / high` | `yes` | `user` | Reasoning effort for the suggestion call; default and `none` disable reasoning, while other values use a supported model effort. Remote-overridable. |
@@ -647,7 +593,7 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 
 | Key | Type / Values | Requirements | Managed | Details |
 | --- | --- | --- | --- | --- |
-| `voice.api_base` | `string` | `yes` | `user` | HTTPS API root for speech-to-text. Unset inherits `[endpoints].xai_api_base_url`. |
+| `voice.api_base` | `string` | `yes` | `user` | HTTPS API root for speech-to-text. Unset inherits `[endpoints].xai_api_base_url`. The Viktor compat API has no speech-to-text endpoint. |
 | `voice.language` | `string` | `yes` | `user` | Preferred STT language catalog code or `auto`. |
 | `voice.sample_rate` | `number` | `yes` | `user` | STT capture rate in Hz. |
 
@@ -655,7 +601,7 @@ User-level configuration lives in `$VKTR_HOME/config.toml` (default `~/.vktr/con
 
 | Key | Type / Values | Requirements | Managed | Details |
 | --- | --- | --- | --- | --- |
-| `workflows.enabled` | `boolean` | `yes` | `user` | Enable workflows. |
+| `workflows.enabled` | `boolean` | `yes` | `user` | Enable workflows. Default off in vktr. Also VKTR_WORKFLOWS and VKTR_FULL_TOOLSET. |
 
 ### `worktree`
 
@@ -673,7 +619,7 @@ One exception to that rule:
 | --- | --- |
 | `features.remote_fetch` | The managed value wins over the developer's. |
 
-vktr reads `/etc/grok/managed_config.toml` first, then `$VKTR_HOME/managed_config.toml`, which the console keeps in sync. Values in the second replace values in the first.
+vktr reads `/etc/grok/managed_config.toml` first, then `$VKTR_HOME/managed_config.toml`. Values in the second replace values in the first.
 
 The **Managed** column on the tables above is the per-key answer: `fleet` means the fleet value stands, `user` means the user's file wins, `—` means this file is ignored.
 

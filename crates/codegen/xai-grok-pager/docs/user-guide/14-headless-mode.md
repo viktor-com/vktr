@@ -12,7 +12,9 @@ Passing a prompt non-interactively triggers headless mode. The most common way i
 vktr -p "Your prompt here"
 ```
 
-vktr processes the prompt, runs any necessary tools, and prints the result to stdout. The process exits when the response is complete.
+vktr sends the prompt to the model (Viktor by default), runs any tools it asks for, and streams the answer to stdout. The process exits when the response is complete. One prompt makes one model request per model round: no extra requests for titles or summaries.
+
+Headless mode needs a Viktor API key: `VIKTOR_API_KEY` in the environment, or a key saved with `vktr login`. No login screen is shown.
 
 ---
 
@@ -21,13 +23,14 @@ vktr processes the prompt, runs any necessary tools, and prints the result to st
 | Flag                    | Description                                           |
 | ----------------------- | ----------------------------------------------------- |
 | `-p, --single <PROMPT>` | The prompt to send (or use `--prompt-json` / `--prompt-file`) |
-| `-m, --model <MODEL>`   | Model to use (e.g., `grok-4.6`)              |
+| `-m, --model <MODEL>`   | Model to use (e.g., `viktor`, or a `[model.<name>]` key) |
 | `-s, --session-id <ID>` | Create a **new** session with this **UUID** (errors if invalid UUID or already in use under the target session directory; does not resume, use `-r`/`-c`) |
 | `--fork-session`        | With `-r`/`-c`, fork into a new session ID instead of appending to the original |
 | `-r, --resume <ID_OR_TITLE>` | Resume an existing session by ID, or by title for the current directory, ignoring letter case (a sole manually renamed match wins among duplicates; remaining duplicates error with their IDs; UUID-shaped values always take the ID path; scripts should prefer IDs) |
 | `-c, --continue`        | Continue the most recent session in current directory  |
 | `--cwd <PATH>`          | Set working directory                                 |
 | `--output-format <FMT>` | Output format: `plain`, `json`, `streaming-json`, `streaming-messages-json` |
+| `--json`                | Shorthand for `--output-format json`                  |
 | `--include-partial-messages` | Emit raw `stream_event` deltas. Only affects `--output-format streaming-messages-json`; ignored (with a warning) otherwise. |
 | `--yolo`                | Auto-approve all tool executions                      |
 | `--rules <TEXT>`        | Custom rules for the system prompt                    |
@@ -41,7 +44,6 @@ vktr processes the prompt, runs any necessary tools, and prints the result to st
 | `--prompt-json <JSON>`  | Prompt as JSON content blocks                         |
 | `--prompt-file <PATH>`  | Prompt from a file                                    |
 | `--verbatim`            | Send prompt exactly as given                          |
-| `--no-auto-update`      | Disable update checks for this session                |
 | `--sandbox <PROFILE>`   | Sandbox profile for filesystem/network access         |
 
 > **Note:** `--tools`, `--disallowed-tools`, `--max-turns`, and `--agents` are headless-only flags. If used in the interactive TUI, a warning is printed and the flag is ignored. `--reasoning-effort`/`--effort`, `--permission-mode`, `--allow`, and `--deny` work in both modes. For more flags (agents and worktrees), see [Additional Headless Flags](#additional-headless-flags).
@@ -57,7 +59,7 @@ Tool names are internal tool IDs (e.g. the shell tool is `run_terminal_cmd`, not
 vktr -p "Explain this codebase" --tools "read_file,grep,list_dir"
 
 # Remove web access and file editing
-vktr -p "Review this code" --disallowed-tools "web_search,web_fetch,search_replace"
+vktr -p "Review this code" --disallowed-tools "web_fetch,search_replace"
 
 # Remove shell access
 vktr -p "Review this code" --disallowed-tools "run_terminal_cmd"
@@ -116,7 +118,7 @@ vktr -p "Build the project" --allow "Bash"
 
 ## Output Formats
 
-Headless mode supports four output formats, selected with `--output-format`.
+Headless mode supports four output formats, selected with `--output-format` (`--json` is shorthand for `--output-format json`).
 
 ### plain (default)
 
@@ -150,7 +152,7 @@ ACP/Messages token (`end_turn`, `max_tokens`, …).
     "total_tokens": 50103
   },
   "modelUsage": {
-    "grok-4.6": {
+    "viktor": {
       "inputTokens": 7210,
       "outputTokens": 1893,
       "cacheReadInputTokens": 41000,
@@ -211,7 +213,7 @@ failures may also include frozen spend fields when usage was recorded:
 
 ### streaming-json
 
-Newline-delimited JSON, one `type`-tagged object per line, derived from the agent's ACP session updates. Leaf field names (`toolCallId`, `kind`, `rawInput`, `rawOutput`) follow ACP; `toolName` and the `usage` line are xAI additions. Consume it by switching on `type`.
+Newline-delimited JSON, one `type`-tagged object per line, derived from the agent's ACP session updates. Leaf field names (`toolCallId`, `kind`, `rawInput`, `rawOutput`) follow ACP; `toolName` and the `usage` line are vktr additions (inherited from upstream). Consume it by switching on `type`.
 
 ```json
 {"type":"thought","data":"Analyzing the directory structure..."}
@@ -250,13 +252,13 @@ vktr may also emit `max_turns_reached` and `auto_compact_*` events; treat the li
 
 Newline-delimited JSON in the Messages API `stream-json` wire format. The data-bearing surface matches the Messages shape exactly. This includes the `assistant`/`user` message bodies, `usage`, `tool_use`/`tool_result`, inline web search, `stop_reason`, and the `--include-partial-messages` event framing. A consumer that reconstructs messages, reads spend, or detects errors works without changes.
 
-The `system`/`init` and terminal `result` lines carry metadata. vktr emits the fields it has real data for and omits pure-placeholder fields it cannot fill, rather than zero-filling them. As a result, those two lines may not pass strict `init`/`result` schema validation. The individual fields are listed below. Read the fidelity notes before treating any one field as authoritative. For a clean xAI-native stream with no placeholder shape, use `streaming-json`.
+The `system`/`init` and terminal `result` lines carry metadata. vktr emits the fields it has real data for and omits pure-placeholder fields it cannot fill, rather than zero-filling them. As a result, those two lines may not pass strict `init`/`result` schema validation. The individual fields are listed below. Read the fidelity notes before treating any one field as authoritative. For a clean native stream with no placeholder shape, use `streaming-json`.
 
 The stream opens with a `system`/`init` line, then `assistant` messages whose `message.content[]` holds `text`, `thinking`, and `tool_use` blocks, `user` messages carrying `tool_result` blocks, and a terminal `result`:
 
 ```json
-{"type":"system","subtype":"init","session_id":"abc123","apiKeySource":"user","model":"grok-4.6","cwd":"/repo","permissionMode":"default","tools":["read_file","bash"],"slash_commands":["review"],"mcp_servers":[{"name":"linear","status":"connected"}],"skills":[],"uuid":"..."}
-{"type":"assistant","message":{"id":"msg_0","type":"message","role":"assistant","model":"grok-4.6","content":[{"type":"text","text":"Let me read the file."},{"type":"tool_use","id":"call_1","name":"read_file","input":{"path":"src/main.rs"}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{...}},"parent_tool_use_id":null,"session_id":"abc123","uuid":"..."}
+{"type":"system","subtype":"init","session_id":"abc123","apiKeySource":"user","model":"viktor","cwd":"/repo","permissionMode":"default","tools":["read_file","bash"],"slash_commands":["review"],"mcp_servers":[{"name":"linear","status":"connected"}],"skills":[],"uuid":"..."}
+{"type":"assistant","message":{"id":"msg_0","type":"message","role":"assistant","model":"viktor","content":[{"type":"text","text":"Let me read the file."},{"type":"tool_use","id":"call_1","name":"read_file","input":{"path":"src/main.rs"}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{...}},"parent_tool_use_id":null,"session_id":"abc123","uuid":"..."}
 {"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":"fn main() {}","is_error":false}]},"parent_tool_use_id":null,"session_id":"abc123","uuid":"..."}
 {"type":"result","subtype":"success","is_error":false,"duration_ms":0,"duration_api_ms":0,"num_turns":7,"result":"Here's a summary...","stop_reason":"end_turn","total_cost_usd":0.0127,"usage":{"input_tokens":812,"output_tokens":210,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"server_tool_use":{"web_search_requests":0}},"modelUsage":{},"session_id":"abc123","uuid":"..."}
 ```
@@ -280,9 +282,9 @@ On `init`, `skills` is live. It lists the session's user-invocable skill names, 
 
 The other `init` fields carry real data:
 
-- `apiKeySource` is `user` for API-key auth and `oauth` otherwise. vktr does not distinguish the schema's `project`, `org`, and `temporary` sources.
-- `permissionMode` is the effective headless mode mapped to the Messages enum: the `--permission-mode` value, or `bypassPermissions` under `--yolo`, else `default`. Grok-only modes such as `auto` collapse to `default`.
-- `mcp_servers[].status` is one `x.ai/mcp/list` snapshot, emitted only for `streaming-messages-json`: `connected`, `failed`, `needs-auth`, `pending`, or `disabled`. Servers still handshaking are `pending`. `disabled` is only stamped after the session reports `sessionMcpResolved`; an unresolved list row is `pending` even when `enabled` is still false. The snapshot does not wait for the Blocking startup grace; that grace still applies to the prompt's toolset. Other output formats omit the array and do not call `x.ai/mcp/list`.
+- `apiKeySource` is `user` for API-key auth (always the case with Viktor) and `oauth` otherwise. vktr does not distinguish the schema's `project`, `org`, and `temporary` sources.
+- `permissionMode` is the effective headless mode mapped to the Messages enum: the `--permission-mode` value, or `bypassPermissions` under `--yolo`, else `default`. vktr-only modes such as `auto` collapse to `default`.
+- `mcp_servers[].status` is one snapshot of the agent's MCP server list, emitted only for `streaming-messages-json`: `connected`, `failed`, `needs-auth`, `pending`, or `disabled`. Servers still handshaking are `pending`. `disabled` is only stamped after the session reports `sessionMcpResolved`; an unresolved list row is `pending` even when `enabled` is still false. The snapshot does not wait for the Blocking startup grace; that grace still applies to the prompt's toolset. Other output formats omit the array and do not request the list.
 
 vktr omits the schema's pure-placeholder `init` fields it has no data for, rather than emitting dummy values: `claude_code_version`, `output_style`, and `plugins`.
 
@@ -394,17 +396,20 @@ vktr -p "List files" --output-format json | jq -r '.text'
 
 ### Standard Input
 
-Headless mode does not read piped stdin into the prompt. Pass external content through command substitution or `--prompt-file`:
+Piped input is sent along with the prompt:
 
 ```bash
-# Include git diff as context via command substitution
-vktr -p "Write a concise commit message for these changes:
+# With a prompt: stdin is appended to it as a <stdin> block
+git diff --staged | vktr -p "Write a concise commit message for these changes"
 
-$(git diff --staged)"
+# A bare -p takes stdin as the whole prompt
+echo "What is a monad?" | vktr -p
 
 # Or read the prompt from a file
 vktr --prompt-file ./prompt.txt
 ```
+
+Only a pipe or a regular file is read. A pipe that stays silent for 1 second is ignored, so an idle stdin inherited from a parent process cannot hang a script. Input over 512 KiB is cut, with a note saying so.
 
 ---
 
@@ -413,15 +418,15 @@ vktr --prompt-file ./prompt.txt
 ### Automated Code Review
 
 ```bash
-vktr -p "Review changes for bugs and security issues." \
-  --output-format json --yolo | jq -r '.text' > review.md
+git diff origin/main... | vktr -p "Review this change for bugs and security issues." \
+  --json | jq -r '.text' > review.md
 ```
 
 ### Pre-Commit Hook
 
 ```bash
-vktr -p "Review staged changes for obvious bugs. Reply OK if fine, or list issues." \
-  --yolo --output-format json | jq -r '.text' | grep -q "^OK" || exit 1
+git diff --staged | vktr -p "Review this change for obvious bugs. Reply OK if fine, or list issues." \
+  --json | jq -r '.text' | grep -q "^OK" || exit 1
 ```
 
 ### Batch Processing
@@ -445,7 +450,7 @@ import asyncio
 import json
 import os
 
-class GrokChat:
+class VktrChat:
     """Simple OpenAI-compatible wrapper using headless mode."""
 
     def __init__(self, cwd="."):
@@ -457,7 +462,7 @@ class GrokChat:
                 "--output-format", "streaming-json" if stream else "json",
                 "--yolo"]
 
-    async def create(self, messages, model="grok-4.6", stream=False):
+    async def create(self, messages, model="viktor", stream=False):
         prompt = messages[-1]["content"] if len(messages) == 1 else "\n".join(
             f"{m['role']}: {m['content']}" for m in messages
         )
@@ -493,7 +498,7 @@ class GrokChat:
 
 
 async def main():
-    client = GrokChat(cwd=".")
+    client = VktrChat(cwd=".")
     response = await client.create(
         [{"role": "user", "content": "What files are here?"}]
     )
@@ -542,16 +547,18 @@ Key environment variables that affect headless mode:
 
 | Variable                        | Description                                                   |
 | ------------------------------- | ------------------------------------------------------------- |
-| `XAI_API_KEY`        | API key for authentication (required when no browser login)   |
+| `VIKTOR_API_KEY`               | Viktor API key (or save one with `vktr login`)                |
+| `VIKTOR_BASE_URL`              | Viktor compat API base URL (default `https://api.viktor.com/api/compat/v1`) |
+| `VIKTOR_API_BACKEND`           | `responses` (default), `chat_completions`, or `messages`      |
 | `VKTR_HOME`                    | Override config directory (default: `~/.vktr`)                |
 | `VKTR_LOG_FILE`                | Path to a log file (used verbatim as the path; works in headless and TUI, honors `RUST_LOG`) |
 | `RUST_LOG`                     | Log level filter (e.g. `debug`). Headless logs to stderr.     |
 
-For CI environments without browser access, set `XAI_API_KEY` with an API key from [console.x.ai](https://console.x.ai):
+For CI, set the key from your CI secret store:
 
 ```bash
-export XAI_API_KEY="xai-..."
-vktr -p "Run the test suite" --yolo
+export VIKTOR_API_KEY="zt_live_sk_..."
+vktr -p "Run the test suite and fix failures" --yolo
 ```
 
 ---
@@ -561,7 +568,7 @@ vktr -p "Run the test suite" --yolo
 | Code | Meaning                              |
 | ---- | ------------------------------------ |
 | `0`  | Success. The prompt completed normally |
-| `1`  | Error. Authentication failure, network error, or runtime error |
+| `1`  | Error. Authentication failure, network error, a failed Viktor run, or runtime error |
 | `130` | Interrupted by SIGINT (Ctrl+C)                                   |
 | `143` | Terminated by SIGTERM                                            |
 
@@ -571,12 +578,10 @@ vktr -p "Run the test suite" --yolo
 
 For headless use, authenticate with one of:
 
-- **`XAI_API_KEY`**: simplest for CI. See [Environment Variables](#environment-variables-for-headless) above.
-- **`vktr login --device-auth`** (or `--device-code`): no browser needed on the target machine.
-  See [Authentication > Device Code Flow](02-authentication.md#device-code-flow).
-- **`vktr login`**: browser-based OAuth2 on machines with a GUI.
+- **`VIKTOR_API_KEY`**: simplest for CI. See [Environment Variables](#environment-variables-for-headless) above.
+- **`vktr login`**: saves the key in `~/.vktr/config.toml`; later runs use it automatically. `vktr login < key.txt` reads the key from stdin.
 
-If you've previously logged in, cached credentials are used automatically.
+A failed run prints its error once, as plain text, and exits 1; that includes a Viktor run that failed on the server (its own message is shown) and a tool call that needed approval but could not be asked about (it is denied, nothing is written, and the blocked call is named). JSON output modes keep the raw error.
 
 ---
 
@@ -608,8 +613,6 @@ vktr stores data in `~/.vktr` (override with `VKTR_HOME`; see [Environment Varia
 | Path                     | Contents                              |
 | ------------------------ | ------------------------------------- |
 | `config.toml`            | User configuration                    |
-| `auth.json`              | Cached OAuth2/API credentials         |
-| `version.json`           | Version cache for update checks       |
 | `sessions/`              | Session transcripts (SQLite)          |
 | `memory/`                | Cross-session memory store            |
 | `logs/`                  | Internal log files (for example `unified.jsonl`) |
@@ -624,40 +627,25 @@ vktr stores data in `~/.vktr` (override with `VKTR_HOME`; see [Environment Varia
 
 For containers or CI, mount `~/.vktr` read-only:
 
-- Pre-populate `auth.json` or use `XAI_API_KEY`
+- Pre-populate `config.toml` with the key, or use `VIKTOR_API_KEY`
 - Session persistence fails silently (ephemeral)
-- Update checks log a warning and skip
 
 ```bash
-export XAI_API_KEY="xai-..."
-export VKTR_DISABLE_AUTOUPDATER=1
-vktr -p "..." --no-auto-update
+export VIKTOR_API_KEY="zt_live_sk_..."
+vktr -p "..."
 ```
 
 ---
 
-## Update Check Suppression
+## Updates
 
-| Method                          | Scope     |
-| ------------------------------- | --------- |
-| `--no-auto-update`              | Session   |
-| `VKTR_DISABLE_AUTOUPDATER=1`    | Process   |
-| Non-TTY stderr (auto-detected)  | Automatic |
-| `[cli] auto_update = false`     | Persistent|
-
-`VKTR_DISABLE_AUTOUPDATER` set to a falsy value (`0`, `false`, `off`, `no`, or empty, any
-case) counts as not set. The agent SDKs
-inject `VKTR_DISABLE_AUTOUPDATER=1` for the non-leader agents they spawn (a falsy value in
-the SDK's isolation env keeps updates on), and the stdio agent skips its background update
-unless it runs from the managed install (`$VKTR_HOME/bin/grok`).
-
-Update messages go to **stderr**. Stdout stays clean for `--output-format json`. See also [Environment Variables for Headless](#environment-variables-for-headless).
+vktr never checks for or installs updates, so there is nothing to suppress in CI.
 
 ---
 
 ## Additional Headless Flags
 
-These flags supplement the [Command-Line Options](#command-line-options) table above. Flags already listed there (`--prompt-json`, `--prompt-file`, `--verbatim`, `--sandbox`, `--no-auto-update`) are not repeated here.
+These flags supplement the [Command-Line Options](#command-line-options) table above. Flags already listed there (`--prompt-json`, `--prompt-file`, `--verbatim`, `--sandbox`) are not repeated here.
 
 | Flag                          | Description                                       |
 | ----------------------------- | ------------------------------------------------- |
@@ -665,9 +653,9 @@ These flags supplement the [Command-Line Options](#command-line-options) table a
 | `--agents <JSON>`             | Inline subagent definitions as JSON               |
 | `--system-prompt-override`    | Override the agent's system prompt                |
 | `--no-plan`                   | Disable plan mode                                 |
-| `--no-subagents`              | Disable subagent spawning                         |
+| `--no-subagents`              | Disable subagent spawning (subagents are already off unless `VKTR_SUBAGENTS=1` or `VKTR_FULL_TOOLSET=1`) |
 | `VKTR_MEMORY=0`                | Disable cross-session memory for the process      |
-| `--disable-web-search`        | Disable web search and fetch tools                |
+| `--disable-web-search`        | Disable web search and fetch tools (web search is already off in vktr) |
 | `--no-alt-screen`             | Run inline (no alternate screen)                  |
 | `--worktree [NAME]`           | Create a git worktree from the current checkout (dirty changes included) and run the session there. Launching from a subdirectory lands in the same subdirectory of the worktree. With `-r`, the session is resumed into the new worktree. Not combinable with `--fork-session`. |
 | `--ref <REF>` / `--worktree-ref <REF>` | Branch/tag/commit to base the worktree on (with `--worktree`); a clean checkout, no dirty overlay |

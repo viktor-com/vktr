@@ -687,7 +687,7 @@ mod tests {
 mod apply_tests {
     use super::*;
     use crate::app::session_startup::{
-        VKTR_CHAT_LOCAL_WORKSPACE_ACK_ENV, LocalWorkspaceMode, set_active_local_workspace,
+        LocalWorkspaceMode, VKTR_CHAT_LOCAL_WORKSPACE_ACK_ENV, set_active_local_workspace,
     };
 
     #[test]

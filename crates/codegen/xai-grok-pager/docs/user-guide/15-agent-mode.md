@@ -1,8 +1,103 @@
 # Agent mode (ACP) and IDE integration
 
-Agent mode runs vktr as a long-lived server that clients talk to over [ACP](https://agentclientprotocol.com) (JSON-RPC). Use it from IDEs, SDKs, eval harnesses, and custom apps. For a one-shot prompt that prints and exits, use `vktr -p` instead ([headless mode](14-headless-mode.md)).
+vktr speaks the [Agent Client Protocol](https://agentclientprotocol.com) (ACP, JSON-RPC over stdio) in two different ways:
+
+| Command | What the editor gets |
+|---------|---------------------|
+| `vktr acp` | **Viktor**, working in its own cloud sandbox with your team's tools, reaching your machine only through the editor. Use this to put Viktor in Zed or a JetBrains IDE. |
+| `vktr agent stdio` | **vktr's own local coding agent** (the same one as the TUI), running tools on your machine. |
+
+For a one-shot prompt that prints and exits, use `vktr -p` instead ([headless mode](14-headless-mode.md)). To point another coding tool at Viktor or a local model, see [`vktr launch`](#vktr-launch).
 
 ---
+
+## `vktr acp`: Viktor in your editor
+
+`vktr acp` serves Viktor to an editor over ACP on stdio. It replaces the standalone TypeScript `viktor-acp` package, which is deprecated.
+
+### Set up
+
+It needs a Viktor API key: `VIKTOR_API_KEY`, or the key saved by `vktr login` (used when the environment variable is not set, so an editor started from the desktop still works).
+
+`vktr acp --print-config zed` (or `jetbrains`) prints the editor snippet with the full path of your `vktr`, ready to paste. It does not touch editor files.
+
+**Zed** (`settings.json`):
+
+```json
+{
+  "agent_servers": {
+    "Viktor": {
+      "type": "custom",
+      "command": "vktr",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+Add `"env": { "VIKTOR_API_KEY": "zt_live_sk_..." }` if you have not run `vktr login` and Zed does not inherit your shell environment. Use the absolute path (`~/.local/bin/vktr`) if Zed cannot find `vktr` on its `PATH`.
+
+**JetBrains IDEs** (`~/.jetbrains/acp.json`):
+
+```json
+{
+  "agent_servers": {
+    "Viktor": { "command": "vktr", "args": ["acp"] }
+  }
+}
+```
+
+Any other ACP client: run `vktr acp` as the agent command. stdout carries only the protocol; diagnostics go to stderr.
+
+### What it does
+
+- **One editor session is one Viktor thread.** Follow-up prompts keep Viktor's context and sandbox state.
+- **Editor tools.** When the editor offers file-system or terminal capabilities, Viktor gets `editor_read_file`, `editor_write_file`, and `editor_run_command`, which run through the editor. Writes and commands always ask first (allow once, always allow in this session, or reject), with the diff for writes. Reads inside the workspace run without asking; reads outside it ask. Paths are resolved against the workspace root with `.` and `..` collapsed, so the path you approve is the path touched. `VKTR_ACP_EDITOR_TOOLS=0` turns editor tools off.
+- **The editor's MCP servers.** Servers the editor lists in `session/new` (stdio and HTTP) are connected on your machine, and their tools are offered to Viktor as `mcp__<server>__<tool>`. Every call asks first. stdio servers run in the workspace and die with the session. A server that fails to start is named in the first turn. `VKTR_ACP_MCP=0` turns this off.
+- **Sessions survive restarts.** Each session is saved to `~/.vktr/acp/sessions/<id>.json` (owner-only): the Viktor thread, workspace, title, and the last 400 transcript entries. Editors can list (`session/list`), reload with the transcript replayed (`session/load`), or reattach (`session/resume`); the next prompt continues the same Viktor thread.
+- **Prompt content:** text, images, embedded text resources, and resource links. Audio and embedded binary blobs are dropped.
+- **Cancel, then prompt again.** Viktor needs about 15 seconds to stop a cancelled run; the next prompt waits (up to two minutes, with a thought chunk saying why) instead of failing.
+- **Failed runs** come back as a JSON-RPC error carrying Viktor's own message, error class, and request id, never as assistant text.
+
+Viktor's own tools run in its sandbox and are not shown as tool calls, because the compat API does not report their names yet.
+
+### Troubleshooting
+
+`vktr acp` writes two lines to stderr on start: whether it found a key, and which endpoint it serves. Most editors show an agent's stderr in a log panel.
+
+- **"no Viktor API key"**: the handshake still succeeds, but prompts fail. Set `VIKTOR_API_KEY` or run `vktr login`.
+- **Auth errors** carry Viktor's message plus a hint (wrong or expired key, missing `chat:completions` scope, no linked chat identity).
+- **`Could not reach Viktor at …`**: check `VIKTOR_BASE_URL`.
+- **Viktor says it cannot see your files**: the editor did not offer file-system capabilities, or `VKTR_ACP_EDITOR_TOOLS=0` is set.
+
+`vktr doctor` shows how many `vktr acp` sessions are saved and whether editor tools are on.
+
+---
+
+## `vktr launch`
+
+`vktr launch` points another installed coding tool at a local OpenAI-compatible backend, or at Viktor, without editing that tool's provider config:
+
+```bash
+vktr launch codex                                  # first reachable local backend, discovered model
+vktr launch --backend ollama --model qwen3.5:4b opencode
+vktr launch --backend http://host:8000 pi -p "explain this repo"
+vktr launch --config opencode                      # print the wiring (secrets masked), start nothing
+vktr launch --viktor claude                        # Claude Code against the Viktor compat API
+```
+
+Supported tools: `claude`, `codex`, `copilot`, `grok` (xAI's own CLI), `hermes`, `mi`, `opencode`, `pi`, `pool`, `vktr`. Launch options go before the tool name; everything after it is passed to the tool unchanged, and the tool runs from the current directory.
+
+- Without `--backend`, vktr probes the usual local ports (Ollama, llama.cpp, LM Studio, vLLM, SGLang, TabbyAPI, mistral.rs, Docker Model Runner, MLX, LiteLLM) and picks the first reachable one. Without `--model`, it uses the first non-embedding model the backend lists.
+- `--viktor` uses `VIKTOR_API_KEY` or the key saved by `vktr login`. With `claude`, every Claude Code model slot is routed to Viktor, and vktr warns that each request becomes a Viktor run.
+- `claude` is refused for backends that do not speak the Anthropic Messages API (anything but Ollama and Viktor).
+- If [Harbor](https://github.com/av/harbor) is installed, local launches (other than `vktr` itself) are handed to `harbor launch`, which can also start a backend. Without Harbor, vktr cannot start a backend; it lists the endpoints it probed and says how to start one.
+
+---
+
+## `vktr agent stdio`: the local agent over ACP
+
+The rest of this page covers `vktr agent`, which runs vktr's own agent as a long-lived ACP server for SDKs, eval harnesses, and custom apps. Its model is whatever vktr is configured with (Viktor by default).
 
 ## Automation and SDKs
 
@@ -57,15 +152,14 @@ Typical clients: IDE extensions (Zed, Neovim, Emacs), custom tools, and ACP SDKs
 Agent options apply to every transport (`stdio`, `serve`, `headless`, `leader`). They go after `agent` and before the mode name. Mode-specific flags go after the mode (for example `serve --bind`).
 
 ```bash
-vktr agent --always-approve --model grok-4.6 stdio
+vktr agent --always-approve --model viktor stdio
 vktr agent --always-approve serve --bind 127.0.0.1:2419 --secret <token>
 ```
 
 | Flag | Description |
 | ---- | ----------- |
-| `-m, --model <MODEL>` | Model ID (for example `grok-4.6`). |
+| `-m, --model <MODEL>` | Model ID (for example `viktor`). |
 | `--always-approve` | Run without interactive tool-permission prompts. Alias: `--yolo`. |
-| `--reauth` | Authenticate before the agent starts. |
 | `--agent-profile <PATH>` | Load an agent profile from a file. |
 | `--leader` / `--no-leader` | Connect to a shared leader process, or force a local agent. When a non-`off` sandbox profile is requested, leader mode is refused so tools stay in-process (see [Sandbox Mode](18-sandbox.md)). |
 
@@ -79,17 +173,13 @@ vktr agent --always-approve serve --bind 127.0.0.1:2419 --secret <token>
 
 Clients connect over WebSocket and authenticate with the secret token. If you omit `--secret`, the agent prints a generated token at startup, or set `VKTR_AGENT_SECRET`. The process keeps state across client reconnects. Permissions match other entry points; see [Permissions and safety](22-permissions-and-safety.md).
 
-This is a server you run yourself — vktr's hosted cloud sandboxes do not run `vktr agent serve`.
+This is a server you run yourself.
 
 ---
 
 ## WebSocket relay
 
-To reach the agent over the internet, connect the agent to a relay and point browsers at the same relay:
-
-```bash
-vktr agent --always-approve headless --grok-ws-url wss://your-relay.example.com/ws
-```
+`vktr agent headless` is upstream's relay mode. Its default relay is an xAI service, and vktr provides no relay of its own, so this mode is not supported in vktr. Use `stdio` or `serve`.
 
 ---
 
@@ -141,45 +231,41 @@ Each update names its type, so a client can render distinct panels for reasoning
 
 ## Extension methods
 
-Beyond the base ACP protocol, vktr defines extension methods under the `x.ai/` prefix for SpaceXAI-specific functionality. These cover:
+Beyond the base ACP protocol, `vktr agent` keeps upstream's extension methods. Their names start with the prefix `x.ai/` (a protocol namespace inherited from upstream, not a network address). Relative to that prefix:
 
-| Category                   | Prefix               | Examples                                         |
-| -------------------------- | -------------------- | ------------------------------------------------ |
-| **Filesystem**             | `x.ai/fs/*`          | `list`, `exists`, `read_file`, `write_file`      |
-| **Git**                    | `x.ai/git/*`         | `status`, `stage`, `commit`, `diffs`, `discard`  |
-| **Git Worktree**           | `x.ai/git/worktree/*`| `create`, `remove`, `apply`, `list`, `gc`        |
-| **Search**                 | `x.ai/search/*`      | `fuzzy/open`, `fuzzy/change`, `content`          |
-| **Terminal**               | `x.ai/terminal/*`    | `create`, `kill`, `output`, `wait_for_exit`      |
-| **Session Management**     | `x.ai/session/*`     | `fork`, `resolve_local_for_worktree_resume`      |
-| **Conversation & History** | `x.ai/*`             | `prompt_history`, `rewind/*`, `compact_conversation` |
-| **Authentication**         | `x.ai/auth/*`        | `get_url`, `submit_code`                         |
-| **Feedback & Telemetry**   | `x.ai/*`             | `feedback`, `telemetry/*`                        |
+| Category                   | Methods                                           |
+| -------------------------- | ------------------------------------------------- |
+| **Filesystem**             | `fs/list`, `fs/exists`, `fs/read_file`, `fs/write_file` |
+| **Git**                    | `git/status`, `git/stage`, `git/commit`, `git/diffs`, `git/discard` |
+| **Git Worktree**           | `git/worktree/create`, `remove`, `apply`, `list`, `gc` |
+| **Search**                 | `search/fuzzy/open`, `search/fuzzy/change`, `search/content` |
+| **Terminal**               | `terminal/create`, `kill`, `output`, `wait_for_exit` |
+| **Session Management**     | `session/fork`, `session/resolve_local_for_worktree_resume` |
+| **Conversation & History** | `prompt_history`, `rewind/*`, `compact_conversation` |
 
-The tables here show representative methods in each category. The `x.ai/*` set is SpaceXAI-specific and may expand across releases, so treat it as non-exhaustive and discover the available methods from the agent's `initialize` response.
+These are representative, not exhaustive; discover the available methods from the agent's `initialize` response. `vktr acp` does not use them.
 
 ### Notifications (agent to client)
 
-The agent sends push notifications to clients for real-time updates:
-
-| Notification               | Description                          |
-| -------------------------- | ------------------------------------ |
-| `x.ai/search/fuzzy/status` | Fuzzy search results update          |
-| `x.ai/git/worktree/status` | Worktree creation progress           |
-| `x.ai/fs_notify`           | Filesystem change notification       |
-| `x.ai/fs/index`            | Full file index update               |
-| `x.ai/fs/index/delta`      | Incremental file index update        |
-| `x.ai/session_notification`| Session-specific updates (diff review, retry state, auto-compact) |
-| `x.ai/session/update`      | Session update (tool calls, content) |
+| Notification (after the prefix) | Description                          |
+| ------------------------------- | ------------------------------------ |
+| `search/fuzzy/status`           | Fuzzy search results update          |
+| `git/worktree/status`           | Worktree creation progress           |
+| `fs_notify`                     | Filesystem change notification       |
+| `fs/index`                      | Full file index update               |
+| `fs/index/delta`                | Incremental file index update        |
+| `session_notification`          | Session-specific updates (diff review, retry state, auto-compact) |
+| `session/update`                | Session update (tool calls, content) |
 
 ---
 
 ## Session config options
 
-`session/new` and `session/load` responses include a typed `configOptions` list (standard ACP, not an `x.ai/` extension). Change a live option with `session/set_config_option`.
+`session/new` and `session/load` responses include a typed `configOptions` list (standard ACP, not an extension). Change a live option with `session/set_config_option`.
 
 | `configId` | Category | Effect |
 |------------|----------|--------|
-| `model` | `model` | Switches the session model (`allowed_models`, chat gateway routing). Value must be a string id. |
+| `model` | `model` | Switches the session model (subject to `allowed_models`). Value must be a string id. |
 | `reasoning_effort` | `thought_level` | Applies effort to the current model without changing the model (no prompt rewrite, no `allowed_models` gate). Value must be a string id (`minimal`, `low`, `medium`, `high`, `xhigh`). Dropped with a warning when the model does not advertise `supportsReasoningEffort`. |
 
 ```json
@@ -232,13 +318,7 @@ Official SDK libraries are available for multiple languages:
 
 ## Compatible clients
 
-| Client                                                   | Status      |
-| -------------------------------------------------------- | ----------- |
-| [Zed](https://zed.dev/docs/ai/external-agents)           | Supported   |
-| [Neovim](https://neovim.io) (CodeCompanion, avante.nvim) | Supported   |
-| [Emacs](https://github.com/xenodium/agent-shell)         | Supported   |
-| [marimo notebook](https://github.com/marimo-team/marimo) | Supported   |
-| JetBrains                                                | Coming soon |
+For Viktor in an editor, use `vktr acp` with Zed or a JetBrains IDE ([set up](#set-up)). Other ACP clients (for example Neovim plugins such as CodeCompanion or avante.nvim, Emacs agent-shell, marimo) can run either `vktr acp` or `vktr agent stdio` as their agent command.
 
 ---
 
@@ -248,7 +328,7 @@ Official SDK libraries are available for multiple languages:
 import { spawn, ChildProcess } from "child_process";
 import * as readline from "readline";
 
-class GrokACPChat {
+class VktrACPChat {
   private proc!: ChildProcess;
   private sessionId!: string;
   private rl!: readline.Interface;
@@ -313,7 +393,7 @@ class GrokACPChat {
 }
 
 // Usage
-const client = await new GrokACPChat(".").init();
+const client = await new VktrACPChat(".").init();
 
 for await (const update of client.streamPrompt("List the files in this project")) {
   switch (update.sessionUpdate) {

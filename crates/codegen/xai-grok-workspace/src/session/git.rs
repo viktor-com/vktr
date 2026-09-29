@@ -2881,8 +2881,8 @@ const DEFAULT_EXCLUDES_MARKER: &str = "vktr default excludes";
 /// Local-only default excludes so `stage_all` can't sweep in dependency trees, build output, or env files.
 /// Lives in `.git/info/exclude`, which never enters the repo's history. `git add -f` still overrides.
 const DEFAULT_EXCLUDES_BLOCK: &str = "\
-# grok default excludes (local-only; seeded by the workspace git_commit op)
-.grok/
+# vktr default excludes (local-only; seeded by the workspace git_commit op)
+.vktr/
 node_modules/
 .env
 .env.*

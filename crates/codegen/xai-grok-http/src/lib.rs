@@ -133,8 +133,12 @@ impl PlatformInfo {
 
 impl UserAgent {
     fn render(&self) -> String {
-        if self.origin.product == self.agent_product
-            && self.origin.version.as_deref() == Some(self.agent_version.as_str())
+        // vktr's own front ends still call themselves "grok-pager" (TUI) and "grok-shell"
+        // (headless) internally, the client types other code keys on; on the wire they are vktr.
+        let own_tui = matches!(self.origin.product.as_str(), "grok-pager" | "grok-shell");
+        if own_tui
+            || (self.origin.product == self.agent_product
+                && self.origin.version.as_deref() == Some(self.agent_version.as_str()))
         {
             return format!(
                 "{}/{} ({}; {})",
@@ -185,7 +189,7 @@ pub fn process_user_agent_string() -> String {
 
     UserAgent {
         origin,
-        agent_product: "grok-shell",
+        agent_product: "vktr",
         agent_version,
         platform: PlatformInfo::current(),
     }
@@ -195,7 +199,7 @@ pub fn process_user_agent_string() -> String {
 pub fn session_user_agent_string(origin: &OriginClientInfo) -> String {
     UserAgent {
         origin: origin.clone(),
-        agent_product: "grok-shell",
+        agent_product: "vktr",
         agent_version: agent_version(),
         platform: PlatformInfo::current(),
     }
@@ -244,7 +248,7 @@ pub fn client_type_from_origin(origin: Option<&OriginClientInfo>) -> ClientType 
 }
 
 pub fn process_client_identifier() -> String {
-    std::env::var("VKTR_CLIENT_NAME").unwrap_or_else(|_| "grok-shell".to_string())
+    std::env::var("VKTR_CLIENT_NAME").unwrap_or_else(|_| "vktr".to_string())
 }
 
 pub const CLIENT_MODE_HEADER: &str = "x-grok-client-mode";
@@ -763,25 +767,50 @@ mod tests {
             product: "grok-desktop".to_string(),
             version: Some("1.2.3".to_string()),
         });
-        assert!(with_version.starts_with("grok-desktop/1.2.3 grok-shell/"));
+        assert!(with_version.starts_with("grok-desktop/1.2.3 vktr/"));
         assert!(with_version.contains(" ("));
 
         let without_version = session_user_agent_string(&OriginClientInfo {
             product: "grok-web".to_string(),
             version: None,
         });
-        assert!(without_version.starts_with("grok-web grok-shell/"));
+        assert!(without_version.starts_with("grok-web vktr/"));
         assert!(!without_version.starts_with("grok-web/"));
+    }
+
+    #[test]
+    fn vktrs_own_tui_is_just_vktr_in_the_user_agent() {
+        let ua = UserAgent {
+            origin: OriginClientInfo {
+                product: "grok-pager".to_string(),
+                version: Some("1.0.38".to_string()),
+            },
+            agent_product: "vktr",
+            agent_version: "1.0.38".to_string(),
+            platform: PlatformInfo {
+                os: "linux".to_string(),
+                arch: "x86_64".to_string(),
+            },
+        };
+        assert_eq!(ua.render(), "vktr/1.0.38 (linux; x86_64)");
+        let headless = UserAgent {
+            origin: OriginClientInfo {
+                product: "grok-shell".to_string(),
+                version: Some("1.0.38".to_string()),
+            },
+            ..ua
+        };
+        assert_eq!(headless.render(), "vktr/1.0.38 (linux; x86_64)");
     }
 
     #[test]
     fn user_agent_render_collapses_duplicate_origin_and_agent_identity() {
         let ua = UserAgent {
             origin: OriginClientInfo {
-                product: "grok-shell".to_string(),
+                product: "vktr".to_string(),
                 version: Some("0.1.171".to_string()),
             },
-            agent_product: "grok-shell",
+            agent_product: "vktr",
             agent_version: "0.1.171".to_string(),
             platform: PlatformInfo {
                 os: "macos".to_string(),
@@ -789,7 +818,7 @@ mod tests {
             },
         };
 
-        assert_eq!(ua.render(), "grok-shell/0.1.171 (macos; aarch64)");
+        assert_eq!(ua.render(), "vktr/0.1.171 (macos; aarch64)");
     }
 
     #[tokio::test]

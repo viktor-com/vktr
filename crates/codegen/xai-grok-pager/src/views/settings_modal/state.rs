@@ -856,10 +856,22 @@ pub(super) fn setting_row_visible(
     if meta.key == "voice_capture_mode" && !kitty_releases {
         return false;
     }
+    // The picker and deep-link tests use this row as their enum fixture, so it stays visible there;
+    // `hidden_in_vktr` carries (and its own test pins) the production rule.
+    if !cfg!(test) && hidden_in_vktr(meta.key) {
+        return false;
+    }
     if hide_appearance && meta.hidden_in_minimal {
         return false;
     }
     true
+}
+
+/// Settings vktr does not show. `coding_data_sharing` is upstream's opt-in to xAI training on coding
+/// data; vktr sends nothing to xAI, so the row has no meaning here, and `/privacy` states what vktr
+/// does with your data instead.
+pub(super) fn hidden_in_vktr(key: &str) -> bool {
+    key == "coding_data_sharing"
 }
 
 fn build_rows(registry: &SettingsRegistry, visibility: RowVisibility) -> Vec<RowEntry> {

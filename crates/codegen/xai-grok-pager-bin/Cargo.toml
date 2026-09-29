@@ -1,10 +1,10 @@
 [package]
 name = "xai-grok-pager-bin"
-version = "1.0.38"
+version = "1.0.38-vktr.2"
 edition.workspace = true
 license = "Apache-2.0"
 authors = ["xAI"]
-default-run = "xai-grok-pager"
+default-run = "vktr"
 
 # Composition-root binary for the vktr TUI. The artifact is still named
 # `xai-grok-pager`. This package exists so the binary can link both the pager
@@ -12,10 +12,11 @@ default-run = "xai-grok-pager"
 # depends on `xai-grok-pager`, so the pager library cannot depend back on it
 # (cargo cycle). The binary installs the minimal-mode IoC hooks at startup.
 [[bin]]
-name = "xai-grok-pager"
+name = "vktr"
 path = "src/main.rs"
 
 [dependencies]
+vktr-acp = { path = "../vktr-acp" }
 # The pager library (all application logic + the public API main.rs drives).
 xai-grok-pager = { path = "../xai-grok-pager" }
 # Optional scrollback-native render mode, wired in via the fn-pointer seam.
@@ -43,6 +44,9 @@ tokio = { workspace = true, features = [
 ] }
 tokio-util = { workspace = true, features = ["compat"] }
 anyhow = { workspace = true }
+# vktr login --api-key: verify against the Viktor compat API and write config.toml
+reqwest = { workspace = true }
+toml_edit = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 serde_json = { workspace = true }

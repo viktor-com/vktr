@@ -2498,7 +2498,7 @@ mod tests {
     async fn tool_name_for_kind_resolves_execute() {
         use crate::types::tool::ToolKind;
         let tmp = TempDir::new().unwrap();
-        let vktr = ToolRegistryBuilder::new()
+        let grok = ToolRegistryBuilder::new()
             .finalize(
                 ToolServerConfig {
                     tools: vec![

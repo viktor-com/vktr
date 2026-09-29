@@ -211,8 +211,13 @@ pub(crate) mod test_support {
     use super::*;
     use tracing_subscriber::layer::SubscriberExt as _;
 
+    /// Serialises every caller: the instrumentation timers keep a process-wide parent stack, so two
+    /// tests folding under different default subscribers at once see each other's span ids.
+    static FOLD_LOCK: Mutex<()> = Mutex::new(());
+
     /// Run `f` under a fresh profile layer and return its folded output.
     pub(crate) fn folded_with_layer(f: impl FnOnce()) -> String {
+        let _serial = FOLD_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
         let profile: &'static SpanProfile = Box::leak(Box::new(SpanProfile {
             output: std::path::PathBuf::from("/tmp"),
             label: "test",

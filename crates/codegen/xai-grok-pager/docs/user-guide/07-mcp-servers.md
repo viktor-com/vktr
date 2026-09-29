@@ -46,7 +46,7 @@ tool_timeouts = { slow_op = 120 }     # Per-tool timeout overrides, seconds
 > inline (full payload spilled under the session `mcp/` folder). Default is
 > **20_000 bytes**. Override via:
 >
-> - env `VKTR_MAX_MCP_OUTPUT_BYTES` or `MAX_MCP_OUTPUT_BYTES` (bytes; Grok-native
+> - env `VKTR_MAX_MCP_OUTPUT_BYTES` or `MAX_MCP_OUTPUT_BYTES` (bytes; the `VKTR_` name
 >   wins if both set; Claude-style name, but we bound by **bytes** not tokens)
 > - `config.toml` — user-level (`~/.vktr/config.toml`) **or repo-level**
 >   (`.vktr/config.toml` anywhere on the cwd → git-root chain; the deepest
@@ -102,7 +102,7 @@ vktr mcp list
 vktr mcp list --json          # Machine-readable output
 
 # Add a stdio server. Everything after -- is the server command, so flags
-# like -y reach the server instead of being parsed by grok.
+# like -y reach the server instead of being parsed by vktr.
 vktr mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem /path/to/dir
 
 # Add a stdio server with environment variables (-e is repeatable)
@@ -449,8 +449,8 @@ vktr inspect --json   # Machine-readable
 ### Debug Logging
 
 ```bash
-RUST_LOG=debug VKTR_LOG_FILE=/tmp/grok.log vktr
-tail -f /tmp/grok.log
+RUST_LOG=debug VKTR_LOG_FILE=/tmp/vktr.log vktr
+tail -f /tmp/vktr.log
 ```
 
 Look for log entries containing `mcp` to trace server startup, tool discovery, and tool call execution.

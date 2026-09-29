@@ -1,26 +1,30 @@
-//! `/privacy`: open the "Coding data, retention, and training" setting.
+//! `/privacy`: say where vktr sends your data.
 
-use crate::app::actions::Action;
 use crate::slash::command::{CommandExecCtx, CommandResult, SlashCommand, slash_meta};
 
-const CODING_DATA_SHARING_KEY: &str = "coding_data_sharing";
-
-/// Open settings on `coding_data_sharing`. Takes no arguments.
+/// Say where vktr sends data. Upstream opened xAI's training opt-in here; vktr has no such
+/// setting because nothing goes to xAI. Takes no arguments.
 pub struct PrivacyCommand;
+
+/// What `/privacy` prints. Every line is a fact the spec checks (`.facts`, sections domain and m5).
+pub(crate) const PRIVACY_STATEMENT: &str = "\
+Where vktr sends your data:
+  • Prompts, files you attach, and tool results go only to the model endpoint you configured
+    (Viktor at VIKTOR_BASE_URL, or a [model.*] you added). Viktor's own data handling applies there.
+  • Nothing goes to xAI: no telemetry, no training opt-in, no self-update, no session sharing,
+    no trace upload. /feedback and `vktr trace` stay on this machine.
+  • Sessions, logs and your saved API key live under ~/.vktr (VKTR_HOME); the key file is owner-only.";
 
 impl SlashCommand for PrivacyCommand {
     slash_meta! {
         name: "privacy",
-        // Reads as the row it opens: "Coding data, retention, and training".
-        description: "Open coding data, retention, and training settings",
+        description: "Show where vktr sends your data",
         usage: "/privacy",
     }
 
-    /// Trailing text is ignored, not rejected: `/privacy opt-in` from muscle memory should land on the page, not error.
+    /// Trailing text is ignored, not rejected: `/privacy opt-in` from muscle memory should still answer.
     fn run(&self, _ctx: &mut CommandExecCtx, _args: &str) -> CommandResult {
-        CommandResult::Action(Action::OpenSettingsFocus {
-            key: CODING_DATA_SHARING_KEY,
-        })
+        CommandResult::Message(PRIVACY_STATEMENT.to_owned())
     }
 }
 
@@ -47,18 +51,13 @@ mod tests {
         PrivacyCommand.run(&mut ctx, args)
     }
 
-    fn opens_settings_row(result: &CommandResult) -> bool {
-        matches!(
-            result,
-            CommandResult::Action(Action::OpenSettingsFocus {
-                key: CODING_DATA_SHARING_KEY
-            })
-        )
+    fn states_where_data_goes(result: &CommandResult) -> bool {
+        matches!(result, CommandResult::Message(text) if text == PRIVACY_STATEMENT)
     }
 
-    /// Minimal suppresses the privacy banner, so `/privacy` is the only route to the page there; no mode may fall back to something else.
+    /// Every screen mode gets the statement; there is no xAI settings page to open.
     #[test]
-    fn privacy_opens_settings_row_in_every_screen_mode() {
+    fn privacy_states_where_data_goes_in_every_screen_mode() {
         use crate::app::ScreenMode;
         for mode in [
             ScreenMode::Fullscreen,
@@ -67,10 +66,11 @@ mod tests {
         ] {
             let result = run_privacy("", mode);
             assert!(
-                opens_settings_row(&result),
-                "`/privacy` in {mode:?} must open the settings row, got {result:?}",
+                states_where_data_goes(&result),
+                "`/privacy` in {mode:?} must print the statement, got {result:?}",
             );
         }
+        assert!(PRIVACY_STATEMENT.contains("Nothing goes to xAI"));
     }
 
     /// The arguments this used to accept must not linger as hidden aliases that change a privacy preference straight from the prompt.
@@ -87,7 +87,7 @@ mod tests {
         ] {
             let result = run_privacy(args, ScreenMode::Inline);
             assert!(
-                opens_settings_row(&result),
+                states_where_data_goes(&result),
                 "`/privacy {args}` must just open the page, got {result:?}",
             );
         }

@@ -1574,7 +1574,7 @@ fn editor_render_fixture(buffer: &str, cursor_byte: usize) -> SettingsModalState
     let registry = SettingsRegistry::from_entries(vec![synthetic_meta]);
     let snapshot = PagerLocalSnapshot {
         available_models: vec![(
-            "Grok Test".to_string(),
+            "vktr Test".to_string(),
             acp::ModelId::new(Arc::from("grok-test")),
         )],
         ..PagerLocalSnapshot::default()
@@ -1600,7 +1600,7 @@ fn editor_render_fixture(buffer: &str, cursor_byte: usize) -> SettingsModalState
 /// Cursor lands at the visual column matching `cursor_byte` for buffers that fit entirely within the visible window.
 #[test]
 fn render_editing_value_cursor_at_logical_position_when_buffer_fits() {
-    let mut s = editor_render_fixture("Grok Test", 4); // cursor between "Grok" and " Test"
+    let mut s = editor_render_fixture("vktr Test", 4); // cursor between "vktr" and " Test"
     let area = Rect {
         x: 0,
         y: 0,
@@ -5045,7 +5045,7 @@ fn row_layout_bool_without_chevron() {
     assert_eq!(row_layout(39, label, value, false), RowLayout::TwoLine);
 }
 
-// User-feedback follow-up: always reserve a blank line between the "Tip · Ask Grok…" docs footer
+// User-feedback follow-up: always reserve a blank line between the "Tip · Ask vktr…" docs footer
 // and the keybindings hints. The chrome sets `footer_lines` to `predicted_hint_rows + 1`, so a
 // blank row always separates the tip from the first hint line.
 
@@ -5408,7 +5408,7 @@ fn ctrl_u_clears_the_entire_filter_from_mid_query() {
 
 #[test]
 fn string_editor_paste_sanitizes_validates_and_consumes_rejected_text() {
-    let mut state = editor_render_fixture("Grok Tst", "Grok T".len());
+    let mut state = editor_render_fixture("vktr Tst", "vktr T".len());
     let outcome = handle_settings_paste(&mut state, "e\r\n");
     assert!(matches!(outcome, SettingsKeyOutcome::Changed));
     assert_eq!(state.editing_buffer(), Some("vktr Test"));
@@ -5845,7 +5845,7 @@ fn tip_line_has_blank_row_above() {
     let mut tip_y: Option<u16> = None;
     for y in 0..area.height {
         let txt = buf_row_text(&buf, y, area.x, area.width);
-        if txt.contains("Tip") && txt.contains("Ask Grok") {
+        if txt.contains("Tip") && txt.contains("Ask vktr") {
             tip_y = Some(y);
             break;
         }
@@ -6451,7 +6451,7 @@ fn consent_chooser_drops_tip_and_reset() {
     let mut consent = enter_picker_for("coding_data_sharing");
     let text = screen(&mut consent);
     assert!(
-        !text.contains("Ask Grok"),
+        !text.contains("Ask vktr"),
         "consent chooser must not render the docs tip:\n{text}"
     );
     assert!(
@@ -7627,8 +7627,10 @@ fn locked_coding_data_sharing_row_renders_locked_value_without_chevron() {
         "locked row must not render the `{chevron}` enter affordance: {line:?}"
     );
 
-    // Control arm: unlocked row shows the plain value and chevron
+    // Control arm: unlocked row shows the plain value and chevron. The unlocked layout is indexed
+    // afresh: rows above this one come and go with process-global state other tests toggle.
     let mut s = make_state();
+    let idx = coding_data_sharing_row_idx(&s);
     s.selected = idx;
     let mut buf = Buffer::empty(area);
     render_rows(&mut buf, area, &mut s, &theme);
@@ -7709,4 +7711,10 @@ fn locked_coding_data_sharing_expanded_description_replaces_with_reason() {
         !text.contains("Managed by your team admin."),
         "unlocked expansion must not mention the team-admin lock: {text:?}"
     );
+}
+
+#[test]
+fn the_xai_training_opt_in_is_not_a_vktr_setting() {
+    assert!(super::state::hidden_in_vktr("coding_data_sharing"));
+    assert!(!super::state::hidden_in_vktr("theme"));
 }

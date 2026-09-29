@@ -48,13 +48,14 @@ fn registered_settings() {
             ("session_search", ("VKTR_SESSION_SEARCH", true)),
             ("lsp_tools", ("VKTR_LSP_TOOLS", false)),
             ("web_fetch", ("VKTR_WEB_FETCH", false)),
-            ("session_recap", ("VKTR_SESSION_RECAP", true)),
+            // Off in vktr: each would be a separate billed Viktor run (see .facts, m1).
+            ("session_recap", ("VKTR_SESSION_RECAP", false)),
             ("ask_user_question", ("VKTR_ASK_USER_QUESTION", true)),
             ("voice_mode", ("VKTR_VOICE_MODE", true)),
             ("write_file", ("VKTR_WRITE_FILE", true)),
             ("feedback", ("VKTR_FEEDBACK_ENABLED", true)),
             ("feedback_trace_card", ("VKTR_FEEDBACK_TRACE_CARD", false)),
-            ("turn_summary", ("VKTR_TURN_SUMMARY", true)),
+            ("turn_summary", ("VKTR_TURN_SUMMARY", false)),
             ("cancel_rewind", ("VKTR_CANCEL_REWIND", true)),
             (
                 "compaction_verbatim_input",

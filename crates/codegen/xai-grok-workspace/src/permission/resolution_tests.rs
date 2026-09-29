@@ -318,13 +318,16 @@ fn discovery_with_no_settings_files() {
     let paths = find_claude_settings_paths(cwd);
     assert!(!paths.is_empty(), "should return candidate paths");
 
+    // Only the project tier is known to be empty: the developer running this may have a real
+    // `~/.claude/settings.json`, which the global tier legitimately loads.
     let loaded: Vec<_> = paths
         .iter()
+        .filter(|p| p.starts_with(cwd))
         .filter_map(|p| load_claude_settings(p))
         .collect();
     assert!(
         loaded.is_empty(),
-        "no settings files exist, none should load"
+        "no project settings files exist, none should load"
     );
 }
 

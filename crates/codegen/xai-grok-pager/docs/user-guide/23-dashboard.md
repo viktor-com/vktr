@@ -196,8 +196,7 @@ navigation cursor, not a reply target — open an agent to talk to it.
   `+ New Agent` is focused.
 
 `/usage` opens the usage modal over the dashboard. The dashboard has no
-session, so the **Usage limit** tab shows your account allowance while the
-two session tabs read "No active session"; open an agent for its context and
+session, so the session tabs read "No active session"; open an agent for its context and
 token totals (`/context` and `/session-info` only work inside a session).
 `Esc` or `[✗]` closes it.
 

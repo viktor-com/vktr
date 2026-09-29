@@ -342,7 +342,8 @@ fn credit_limit_translate_max_tier_retry_is_second_option() {
 fn is_max_tier_positive_match() {
     assert!(is_max_tier(Some("supergrok_heavy")));
     assert!(is_max_tier(Some("SuperGrok Heavy")));
-    assert!(is_max_tier(Some("SUPERVKTR_HEAVY")));
+    // The tier name is xAI's subscription id, an upstream literal the rebrand must not touch.
+    assert!(is_max_tier(Some("SuperGrok_Heavy")));
 }
 
 #[test]
@@ -430,7 +431,7 @@ fn upsell_non_max_qa_heading_is_spending_cap_when_payg_on() {
 }
 
 #[test]
-fn upsell_non_max_upgrade_url_is_supergrok() {
+fn upsell_non_max_upgrade_url_is_viktor_pricing() {
     let mut app = test_app_with_agent();
     open_upsell_qa(
         &mut app,
@@ -440,12 +441,11 @@ fn upsell_non_max_upgrade_url_is_supergrok() {
         .id
         .as_deref()
         .unwrap();
-    assert!(url.contains("supergrok"), "got: {url}");
-    assert!(url.contains("referrer=grok-build"), "got: {url}");
+    assert_eq!(url, "https://viktor.com/pricing");
 }
 
 #[test]
-fn upsell_non_max_payg_url_is_usage() {
+fn upsell_non_max_payg_url_is_billing() {
     let mut app = test_app_with_agent();
     open_upsell_qa(
         &mut app,
@@ -455,7 +455,7 @@ fn upsell_non_max_payg_url_is_usage() {
         .id
         .as_deref()
         .unwrap();
-    assert!(url.contains("_s=usage"), "got: {url}");
+    assert_eq!(url, "https://app.viktor.com/settings/billing");
 }
 
 #[test]
@@ -819,7 +819,10 @@ fn manage_billing_gates_on_consumer_billing_surface() {
     let mut app = test_app_with_agent();
     dispatch(Action::ManageBilling, &mut app);
     let opened = std::fs::read_to_string(&out).unwrap_or_default();
-    assert!(opened.contains("grok.com/?_s=usage"), "got: {opened}");
+    assert!(
+        opened.contains("app.viktor.com/settings/billing"),
+        "got: {opened}"
+    );
     let _ = std::fs::remove_file(&out);
 
     // Non-consumer: silent no-op (slash command never offers manage).
@@ -1289,19 +1292,14 @@ fn free_usage_upsell_shows_three_options_with_exact_labels() {
     assert_eq!(q.question, "You hit your free usage limit.");
     let expected = [
         (
-            "Upgrade to SuperGrok",
-            "For everyday coding and productivity tasks",
+            "See Viktor plans",
+            "Compare plans and usage limits",
             Some(UPSELL_URL_UPGRADE),
         ),
         (
-            "Upgrade to SuperGrok Plus",
-            "Significantly higher usage and rate limits",
-            Some(UPSELL_URL_UPGRADE),
-        ),
-        (
-            "Upgrade to SuperGrok Heavy",
-            "Get the most out of vktr. Highest usage limits.",
-            Some(UPSELL_URL_UPGRADE),
+            "Manage billing",
+            "Buy credits or change your plan",
+            Some(UPSELL_URL_PAYG),
         ),
     ];
     assert_eq!(q.options.len(), expected.len());
@@ -1374,7 +1372,7 @@ fn free_usage_failure_opens_paywall_modal() {
     );
 }
 
-/// Answer translation: every upgrade option opens the upgrade URL.
+/// Answer translation: each option opens the URL stored in its id.
 #[test]
 fn free_usage_translate_local_submit_maps_options() {
     use crate::app::agent_view::translate_local_submit_for_test;
@@ -1389,16 +1387,16 @@ fn free_usage_translate_local_submit_maps_options() {
         source: xai_grok_telemetry::events::SuperGrokUpsell::FreeUsagePaywall,
     };
 
-    for idx in [0, 1, 2] {
+    for (idx, expected) in [(0, UPSELL_URL_UPGRADE), (1, UPSELL_URL_PAYG)] {
         set_first_selection(&mut qv, QuestionSelection::Single(Some(idx)));
         match translate_local_submit_for_test(&qv, kind(), false) {
-            InputOutcome::Action(Action::OpenUrl(url)) => assert_eq!(url, UPSELL_URL_UPGRADE),
+            InputOutcome::Action(Action::OpenUrl(url)) => assert_eq!(url, expected),
             other => panic!("expected OpenUrl for option {idx}, got {other:?}"),
         }
     }
 }
 
-/// Submitting a tier-restricted command opens the three-option SuperGrok upsell and neither runs the command nor leaks the text to the model.
+/// Submitting a tier-restricted command opens the plan upsell and neither runs the command nor leaks the text to the model.
 #[test]
 fn restricted_command_submit_opens_three_option_upsell() {
     let mut app = test_app_with_agent();
@@ -1431,14 +1429,15 @@ fn restricted_command_submit_opens_three_option_upsell() {
         )
     ));
     let q = first_question(qv);
-    assert_eq!(q.question, "Unlock all features with SuperGrok.");
-    assert_eq!(q.options.len(), 3);
-    assert_eq!(option_at(q, 0).label, "Upgrade to SuperGrok");
+    assert_eq!(
+        q.question,
+        "This command isn\u{2019}t available on your plan."
+    );
+    assert_eq!(q.options.len(), 2);
+    assert_eq!(option_at(q, 0).label, "See Viktor plans");
     assert_eq!(option_at(q, 0).id.as_deref(), Some(UPSELL_URL_UPGRADE));
-    assert_eq!(option_at(q, 1).label, "Upgrade to SuperGrok Plus");
-    assert_eq!(option_at(q, 1).id.as_deref(), Some(UPSELL_URL_UPGRADE));
-    assert_eq!(option_at(q, 2).label, "Upgrade to SuperGrok Heavy");
-    assert_eq!(option_at(q, 2).id.as_deref(), Some(UPSELL_URL_UPGRADE));
+    assert_eq!(option_at(q, 1).label, "Manage billing");
+    assert_eq!(option_at(q, 1).id.as_deref(), Some(UPSELL_URL_PAYG));
 }
 
 /// Aliases of a restricted command hit the same upsell (deny-list matching covers aliases via the registry).

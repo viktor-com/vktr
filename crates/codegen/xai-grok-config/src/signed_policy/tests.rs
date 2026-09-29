@@ -55,6 +55,14 @@ fn write_policy(home: &std::path::Path, p: &SignedPayload) {
 }
 
 /// Pins the wire contract: a raw server-shaped JSON payload must verify and parse here.
+/// `verification_active()` reads a process-wide kill switch that the remote-settings tests flip;
+/// libtest runs tests on parallel threads, so every test that observes or mutates that switch
+/// takes this lock. (`with_dark` itself is thread-local and needs no serialisation.)
+static KILL_SWITCH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+fn kill_switch_guard() -> std::sync::MutexGuard<'static, ()> {
+    KILL_SWITCH_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[test]
 fn server_wire_format_is_client_verifiable() {
     let (kp, pubkey) = test_keypair();
@@ -488,6 +496,7 @@ fn sidecar_round_trips_on_disk() {
 
 #[test]
 fn verification_armed_with_embedded_key() {
+    let _serialized = kill_switch_guard();
     // Armed: prod v1 key compiled in.
     assert!(verification_active());
     assert_eq!(EMBEDDED_DEPLOYMENT_CONFIG_PUBKEYS.len(), 1);
@@ -509,6 +518,7 @@ fn verification_armed_with_embedded_key() {
 /// An empty key set turns verification off; an incident disarm looks the same.
 #[test]
 fn with_dark_forces_keyless_verification_inactive() {
+    let _serialized = kill_switch_guard();
     test_seam::with_dark(|| {
         assert!(
             !verification_active(),
@@ -523,6 +533,7 @@ fn with_dark_forces_keyless_verification_inactive() {
 /// Armed: a policy with a missing or untrusted sidecar is flagged; an empty dir is not.
 #[test]
 fn cloud_cache_signature_invalid_when_armed() {
+    let _serialized = kill_switch_guard();
     let dir = tempfile::tempdir().unwrap();
     assert!(verification_active());
     assert!(!cloud_cache_signature_invalid(
@@ -548,6 +559,7 @@ fn cloud_cache_signature_invalid_when_armed() {
 /// Keyless: the public gate stays inert with an unsigned policy on disk.
 #[test]
 fn cloud_cache_signature_invalid_inert_when_dark() {
+    let _serialized = kill_switch_guard();
     test_seam::with_dark(|| {
         let dir = tempfile::tempdir().unwrap();
         write_policy(dir.path(), &payload());
@@ -893,6 +905,7 @@ fn signed_cache_compromised_rejects_foreign_permissive_policy() {
 /// Keyless: the public entry reads Inactive.
 #[test]
 fn signed_cache_compromised_inactive_when_dark() {
+    let _serialized = kill_switch_guard();
     test_seam::with_dark(|| {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path();
@@ -908,6 +921,7 @@ fn signed_cache_compromised_inactive_when_dark() {
 /// Armed: a foreign key reads NoAuthenticSidecar (never Inactive).
 #[test]
 fn signed_cache_compromised_is_no_authentic_sidecar_when_armed() {
+    let _serialized = kill_switch_guard();
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path();
     let (kp, _) = test_keypair();
@@ -1136,6 +1150,7 @@ fn with_remote_disarm_lock<R>(f: impl FnOnce() -> R) -> R {
 
 #[test]
 fn remote_kill_switch_dark_embed_stays_inactive() {
+    let _serialized = kill_switch_guard();
     with_remote_disarm_lock(|| {
         // Forced dark: inactive regardless of kill-switch (prod embed is keyed).
         test_seam::with_dark(|| {
@@ -1155,6 +1170,7 @@ fn remote_kill_switch_dark_embed_stays_inactive() {
 /// Untrusted origin cannot disarm.
 #[test]
 fn remote_kill_switch_with_keys_disarms_and_rearms() {
+    let _serialized = kill_switch_guard();
     with_remote_disarm_lock(|| {
         apply_remote_managed_config_signature_verification(Some(true), true);
         assert!(
@@ -1188,6 +1204,7 @@ fn remote_kill_switch_with_keys_disarms_and_rearms() {
 /// The kill-switch stops the gate from refusing sessions; it does not change who authored the cache, so attestation only follows the embedded keys.
 #[test]
 fn signed_requirements_attest_ignores_remote_kill_switch() {
+    let _serialized = kill_switch_guard();
     with_remote_disarm_lock(|| {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path();

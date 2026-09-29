@@ -1,38 +1,31 @@
 # Getting Started
 
-vktr is a terminal-based AI coding assistant from SpaceXAI. It runs as a TUI (Terminal User Interface) that understands your codebase, executes shell commands, edits files, searches the web, and manages tasks.
+vktr is a terminal coding agent whose model provider is Viktor. It runs as a TUI (Terminal User Interface) that understands your codebase, executes shell commands, edits files, fetches web pages, and manages tasks. The model is Viktor, reached through the Viktor compat API; each prompt you send becomes a Viktor run.
 
-You can use it interactively as a full-screen TUI, run it headlessly for scripting and CI/CD, or integrate it into editors via the Agent Client Protocol (ACP).
+You can use it interactively as a full-screen TUI, run it headlessly for scripting and CI/CD, or serve Viktor to an editor over the Agent Client Protocol (ACP) with `vktr acp`.
+
+vktr is a rebranded fork of xAI's Grok Build (Apache-2.0). It does not contact xAI services and has no telemetry.
 
 ---
 
 ## Installation
 
-Install the latest stable release (macOS, Linux, or Windows via Git Bash):
+Releases are installed with `install.sh` from `viktor-com/vktr`:
 
 ```bash
-curl -fsSL https://x.ai/cli/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/viktor-com/vktr/main/install.sh | sh
 ```
 
-Install a specific version:
+From a checkout of the source:
 
 ```bash
-curl -fsSL https://x.ai/cli/install.sh | bash -s 0.1.42
+sh install.sh --tarball dist/vktr-<version>-<target>.tar.gz   # a tarball built by scripts/dist.sh
+sh install.sh --from-source                                   # build here
 ```
 
-On **Windows (PowerShell)**, use the native PowerShell installer:
+The binary goes to `~/.vktr/bin` with a link in `~/.local/bin`; no root is needed. Release downloads are checked against their `.sha256`, and a release that cannot be verified is refused. `VKTR_RELEASE_REPO` (or `VKTR_RELEASE_BASE_URL` for a plain file server) points the installer at another location.
 
-```powershell
-irm https://x.ai/cli/install.ps1 | iex
-```
-
-Install a specific version:
-
-```powershell
-$env:VKTR_VERSION="0.1.42"; irm https://x.ai/cli/install.ps1 | iex
-```
-
-The PowerShell installer automatically adds `%USERPROFILE%\.vktr\bin` to your User PATH. Alternatively, install via [Git for Windows](https://gitforwindows.org/) (Git Bash) or MSYS2 using the bash script above. WSL users get the Linux binary automatically.
+Builds exist for Linux x86_64 and aarch64 and need glibc 2.28 or newer (RHEL 8, Debian 10, Ubuntu 20.04 and later). macOS needs a build from source on a Mac.
 
 Verify the installation:
 
@@ -40,47 +33,28 @@ Verify the installation:
 vktr --version
 ```
 
-Update to the latest version at any time:
-
-```bash
-vktr update
-```
-
-To fetch a repository through Grove (NFS on macOS, FUSE on Linux), enable
-`vktr clone` with `[clone] enabled = true` in Grove config, `VKTR_CLONE=1`,
-or the enable-both convenience `VKTR_GROVE=1` / `[cli] grove = true` in
-`~/.vktr/config.toml`:
-
-```bash
-vktr clone <url> [dir]
-```
-
-The default is a depth-1 checkout of the selected branch. Pass `--full-history`
-for a complete clone. Clone enablement is independent of session / `-w` Grove
-worktrees (the convenience above turns both on; the specific knobs still win).
-the grok.com sign-in below — see [vktr clone](27-grok-clone.md#authentication)
-and [Configuration reference](26-config-reference.md).
+vktr does not update itself. `vktr update` only explains how to update: rerun the installer you used, or `sh install.sh --from-source` in a checkout.
 
 ---
 
 ## First Launch
 
-Start vktr by running:
+vktr needs a Viktor API key (it starts with `zt_live_sk_` and needs the `chat:completions` scope). Save it once:
 
 ```bash
+vktr login          # paste the key; input is hidden
+vktr doctor         # check the key, endpoint and connection
+vktr                # start the TUI in the current directory
+```
+
+`vktr login` verifies the key against Viktor and saves it in `~/.vktr/config.toml` as `[model.viktor] api_key`, readable only by you. If you start `vktr` without a key, it opens a sign-in screen instead: paste the key there and it is checked and saved the same way. Alternatively, set the key in the environment; it wins over the saved key:
+
+```bash
+export VIKTOR_API_KEY="zt_live_sk_..."
 vktr
 ```
 
-On first launch, vktr opens your browser to authenticate with grok.com. After you sign in, vktr stores your credentials in `~/.vktr/auth.json`, where they persist across sessions. vktr refreshes your credentials automatically and prompts you to sign in again when they can no longer be renewed.
-
-If you prefer API key authentication (e.g., for CI/CD or environments without a browser), set the `XAI_API_KEY` environment variable instead:
-
-```bash
-export XAI_API_KEY="xai-..."
-vktr
-```
-
-See [Authentication](02-authentication.md) for the full set of auth options including OIDC, external auth providers, and device code flow.
+There is no browser login, SSO, or device-code flow. See [Authentication](02-authentication.md) for details.
 
 ---
 
@@ -126,7 +100,7 @@ By default, vktr asks for permission before executing shell commands or editing 
 
 ### Sessions
 
-Every conversation is a **session**. Sessions are automatically saved to `~/.vktr/sessions/` and can be resumed later. Each session tracks the full conversation history, tool calls, file edits, and task state.
+Every conversation is a **session**. Sessions are automatically saved under `~/.vktr/sessions/<encoded working directory>/` and can be resumed later. Each session tracks the full conversation history, tool calls, file edits, and task state. On Viktor's default (responses) protocol a session is one Viktor thread, so Viktor keeps its context and sandbox state across turns and across `--continue` / `--resume`.
 
 - Start a new session: `Ctrl+N` or `/new`
 - Resume a previous session: `/resume` in the TUI, or `--resume <ID>` from the CLI
@@ -146,18 +120,21 @@ Collapse or expand the selected entry with the `Left`/`Right` arrow keys (or `h`
 
 ### Tools
 
-vktr has built-in tools for:
+vktr has built-in tools that run on your machine and return their results to Viktor:
 
 | Tool | Description |
 |------|-------------|
-| `read_file` / `search_replace` | Read and edit files with line-precise changes |
+| `read_file` / `search_replace` / `write` | Read and edit files with line-precise changes |
 | `grep` | Regex search across your codebase (powered by ripgrep) |
 | `list_dir` | List directory contents |
 | `run_terminal_command` | Execute shell commands |
-| `web_search` / `web_fetch` | Search the web and fetch URLs |
+| `web_fetch` | Fetch URLs |
 | `todo_write` | Create and manage task lists |
-| `spawn_subagent` | Spawn parallel subagent sessions |
 | `memory_search` | Search cross-session memory |
+
+The default toolset is lean, because every tool schema is sent with every request. Workflows, subagents, the scheduler, `monitor`, and goal tools are off unless you set `VKTR_FULL_TOOLSET=1` (or `VKTR_WORKFLOWS=1` / `VKTR_SUBAGENTS=1` for one family). Tools that only work against xAI's backend (`web_search`, image and video generation, `send_feedback`) are not offered; `VKTR_XAI_BACKED_TOOLS=1` turns them back on, but they do not work against Viktor.
+
+Viktor also has its own tools, which run in its cloud sandbox. The compat API does not report their names yet, so they are not shown as tool calls.
 
 Tools can be extended with [MCP servers](05-configuration.md#mcp-servers) for integrations like GitHub, databases, and more.
 
@@ -166,7 +143,7 @@ Tools can be extended with [MCP servers](05-configuration.md#mcp-servers) for in
 Type `/` in the prompt to access commands. These provide quick actions without writing a full prompt:
 
 ```
-/model grok-4.6                 # Switch model
+/model viktor                   # Switch model
 /compact                          # Compress conversation history
 /always-approve                   # Toggle always-approve mode
 /new                              # Start a new session
@@ -200,8 +177,8 @@ vktr --rules "Always use TypeScript. Prefer functional components."
 # Auto-approve all tool executions
 vktr --yolo
 
-# Use a specific model
-vktr -m grok-4.6
+# Use a specific model (viktor, or a [model.<name>] you defined)
+vktr -m viktor
 
 # Resume a previous session
 vktr --resume <session-id>
@@ -235,14 +212,16 @@ Output formats:
 | Format | Flag | Description |
 |--------|------|-------------|
 | `plain` | (default) | Human-readable text |
-| `json` | `--output-format json` | Single JSON object with `text`, `stopReason`, `sessionId`, and `requestId` |
+| `json` | `--output-format json` or `--json` | Single JSON object with `text`, `stopReason`, `sessionId`, `requestId`, and usage |
 | `streaming-json` | `--output-format streaming-json` | NDJSON event stream for real-time processing |
 
 Example CI/CD usage:
 
 ```bash
-vktr -p "Review changes for bugs" --output-format json --yolo | jq -r '.text'
+git diff | vktr -p "Review this change for bugs" --json | jq -r '.text'
 ```
+
+Piped input is appended to the prompt; a bare `vktr -p` takes piped input as the whole prompt.
 
 ---
 
@@ -264,7 +243,7 @@ Deeper files take precedence. vktr also reads `CLAUDE.md` files for compatibilit
 
 | Document | What You Will Learn |
 |----------|-------------------|
-| [Authentication](02-authentication.md) | Browser login, API keys, OIDC, external auth, device code flow |
+| [Authentication](02-authentication.md) | Viktor API keys, `vktr login`, `vktr doctor` |
 | [Keyboard Shortcuts](03-keyboard-shortcuts.md) | Complete reference for all key bindings |
 | [Slash Commands](04-slash-commands.md) | All available `/` commands |
 | [Configuration](05-configuration.md) | config.toml, pager.toml, environment variables |

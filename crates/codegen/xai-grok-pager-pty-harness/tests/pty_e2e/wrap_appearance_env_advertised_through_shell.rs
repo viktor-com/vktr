@@ -28,9 +28,9 @@ fn wrap_appearance_env_advertised_through_shell() {
             ("LC_VKTR_APPEARANCE", ""),
         ],
     );
-    let (grok, lc) = parse_printed_appearance(&raw)
+    let (vktr, lc) = parse_printed_appearance(&raw)
         .unwrap_or_else(|| panic!("missing vktr=/lc= line\nraw:\n{raw}"));
-    match (grok.as_str(), lc.as_str()) {
+    match (vktr.as_str(), lc.as_str()) {
         ("", "") => {}
         ("dark", "dark") | ("light", "light") => {}
         _ => panic!(
@@ -59,9 +59,9 @@ fn wrap_appearance_env_desktop_none_does_not_restamp_parent_grok() {
             ("LC_VKTR_APPEARANCE", ""),
         ],
     );
-    let (grok, lc) = parse_printed_appearance(&raw)
+    let (vktr, lc) = parse_printed_appearance(&raw)
         .unwrap_or_else(|| panic!("missing vktr=/lc= line\nraw:\n{raw}"));
-    match (grok.as_str(), lc.as_str()) {
+    match (vktr.as_str(), lc.as_str()) {
         ("light", "") => {}
         ("dark", "dark") | ("light", "light") => {}
         _ => panic!(

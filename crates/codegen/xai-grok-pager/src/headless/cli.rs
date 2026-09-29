@@ -35,13 +35,34 @@ pub enum HeadlessPrompt {
 
 impl HeadlessPrompt {
     /// Build from mutually-exclusive CLI prompt args. `None` means interactive mode.
+    ///
+    /// `stdin` is piped input (see [`read_piped_stdin`]): with `-p <text>` it is appended as a
+    /// `<stdin>` block, and a bare `-p` takes it as the whole prompt.
     pub fn from_args(
         single: Option<&str>,
         prompt_json: Option<&str>,
         prompt_file: Option<&Path>,
+        stdin: Option<&str>,
     ) -> anyhow::Result<Option<Self>> {
         if let Some(text) = single {
-            Self::from_text(text)
+            let text = text.trim();
+            let stdin = stdin.map(str::trim).filter(|s| !s.is_empty());
+            let combined = match stdin {
+                Some(input) if text.is_empty() || text == "-" => input.to_owned(),
+                Some(input) => format!("{text}\n\n<stdin>\n{input}\n</stdin>"),
+                None if text == "-" => {
+                    anyhow::bail!(
+                        "-p -: nothing was piped in; pipe the prompt, e.g. `echo hi | vktr -p`"
+                    )
+                }
+                None => text.to_owned(),
+            };
+            if combined.is_empty() {
+                anyhow::bail!(
+                    "-p needs a prompt: `vktr -p \"question\"`, or pipe one in: `echo question | vktr -p`"
+                );
+            }
+            Self::from_text(&combined)
                 .map(Some)
                 .map_err(|e| anyhow::anyhow!("--single: {e}"))
         } else if let Some(json_str) = prompt_json {
@@ -245,5 +266,130 @@ pub(crate) fn apply_agent_flag(
             ResolvedAgent::FilePath(path) => config.agent_profile_path = Some(path),
             ResolvedAgent::Name(name) => config.agent.name = Some(name),
         }
+    }
+}
+
+/// Largest piped input sent to Viktor; the rest is cut with a note.
+const MAX_STDIN_BYTES: usize = 512 * 1024;
+
+/// How long `-p` waits for piped input to start before ignoring stdin.
+const STDIN_GRACE: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Read piped input for `-p`. Only a pipe or a regular file is read (`cmd | vktr -p`,
+/// `vktr -p < file`); a terminal, `/dev/null` or a socket never is. A pipe that stays silent for
+/// the first second is left alone, so a script whose stdin is an idle inherited pipe does not
+/// hang.
+pub fn read_piped_stdin() -> Option<String> {
+    read_piped(libc::STDIN_FILENO, STDIN_GRACE)
+}
+
+fn read_piped(fd: libc::c_int, grace: std::time::Duration) -> Option<String> {
+    use std::io::Read as _;
+    // SAFETY: fstat on an fd we own for the life of the process, into a zeroed struct.
+    let mode = unsafe {
+        let mut st: libc::stat = std::mem::zeroed();
+        if libc::fstat(fd, &mut st) != 0 {
+            return None;
+        }
+        st.st_mode & libc::S_IFMT
+    };
+    if mode != libc::S_IFIFO && mode != libc::S_IFREG {
+        return None;
+    }
+    if mode == libc::S_IFIFO {
+        let mut pfd = libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        let ms = libc::c_int::try_from(grace.as_millis()).unwrap_or(libc::c_int::MAX);
+        // SAFETY: one valid pollfd.
+        let ready = unsafe { libc::poll(&mut pfd, 1, ms) };
+        if ready <= 0 {
+            return None;
+        }
+    }
+    // SAFETY: borrow the fd without taking ownership; ManuallyDrop keeps it open.
+    let file = std::mem::ManuallyDrop::new(unsafe {
+        <std::fs::File as std::os::fd::FromRawFd>::from_raw_fd(fd)
+    });
+    let mut bytes = Vec::new();
+    (&*file)
+        .take((MAX_STDIN_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    let cut = bytes.len() > MAX_STDIN_BYTES;
+    bytes.truncate(MAX_STDIN_BYTES);
+    let mut text = String::from_utf8_lossy(&bytes).into_owned();
+    if cut {
+        text.push_str(&format!(
+            "\n[vktr: input cut at {} KiB]",
+            MAX_STDIN_BYTES / 1024
+        ));
+    }
+    (!text.trim().is_empty()).then_some(text)
+}
+
+#[cfg(all(test, unix))]
+mod piped_stdin_tests {
+    use super::*;
+    use std::io::Write as _;
+    use std::os::fd::AsRawFd as _;
+
+    #[test]
+    fn prompt_and_piped_input_combine() {
+        let p = |single, stdin| match HeadlessPrompt::from_args(Some(single), None, None, stdin) {
+            Ok(Some(HeadlessPrompt::Text(t))) => t,
+            other => panic!("{:?}", other.map(|_| ())),
+        };
+        assert_eq!(
+            p("explain", Some("E42\n")),
+            "explain\n\n<stdin>\nE42\n</stdin>"
+        );
+        assert_eq!(p("", Some("just this")), "just this");
+        assert_eq!(p("-", Some("just this")), "just this");
+        assert_eq!(p("plain", None), "plain");
+        assert!(HeadlessPrompt::from_args(Some(""), None, None, None).is_err());
+        assert!(HeadlessPrompt::from_args(Some("-"), None, None, None).is_err());
+    }
+
+    #[test]
+    fn a_regular_file_is_read_and_an_idle_pipe_is_not_waited_on() {
+        let mut file = tempfile::tempfile().expect("tempfile");
+        file.write_all(b"from a file").expect("write");
+        use std::io::Seek as _;
+        file.rewind().expect("rewind");
+        assert_eq!(
+            read_piped(file.as_raw_fd(), STDIN_GRACE).as_deref(),
+            Some("from a file")
+        );
+
+        let (reader, _writer) = std::io::pipe().expect("pipe");
+        let started = std::time::Instant::now();
+        assert_eq!(
+            read_piped(reader.as_raw_fd(), std::time::Duration::from_millis(100)),
+            None
+        );
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+
+        let devnull = std::fs::File::open("/dev/null").expect("devnull");
+        assert_eq!(read_piped(devnull.as_raw_fd(), STDIN_GRACE), None);
+    }
+
+    #[test]
+    fn huge_input_is_cut_with_a_note() {
+        let (reader, mut writer) = std::io::pipe().expect("pipe");
+        let feeder = std::thread::spawn(move || {
+            let chunk = vec![b'x'; 64 * 1024];
+            for _ in 0..12 {
+                if writer.write_all(&chunk).is_err() {
+                    break;
+                }
+            }
+        });
+        let text = read_piped(reader.as_raw_fd(), STDIN_GRACE).expect("text");
+        drop(reader);
+        feeder.join().ok();
+        assert!(text.ends_with("[vktr: input cut at 512 KiB]"));
     }
 }

@@ -126,6 +126,10 @@ pub(crate) fn materialize_runtime_socket_deny_paths_from(
         })?;
         let canonical_parent = match dunce::canonicalize(parent) {
             Ok(parent) => parent,
+            // A socket directory this user cannot search (e.g. root-owned /run/podman on a host
+            // with rootful podman) holds nothing the same-uid sandboxed child could reach either,
+            // so there is nothing to deny; treating it as fatal would refuse every profile.
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => continue,
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 match std::fs::symlink_metadata(&candidate) {
                     Err(metadata_error) if metadata_error.kind() == io::ErrorKind::NotFound => {
@@ -141,6 +145,7 @@ pub(crate) fn materialize_runtime_socket_deny_paths_from(
         let metadata = match std::fs::symlink_metadata(&path) {
             Ok(metadata) => metadata,
             Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => continue,
             Err(error) => return Err(with_context(error)),
         };
         if metadata.file_type().is_symlink() {

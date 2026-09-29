@@ -185,7 +185,13 @@ mod tests {
     /// It flows through the real requirements read (`hook_config_layers_at`) and the real assembly (`assemble_hooks`).
     /// All three register with `Requirements` provenance, the provenance the disable exemption keys on.
     #[test]
+    #[serial_test::serial]
     fn requirements_layer_pins_hooks_with_requirements_provenance() {
+        // The user tier of hook sources hangs off $HOME; the host running the suite has its own
+        // ~/.cursor and ~/.claude files, which must not leak into a fixture about the
+        // requirements layer.
+        let isolated_home = tempfile::tempdir().unwrap();
+        let _home = xai_grok_test_support::EnvGuard::set("HOME", isolated_home.path());
         let system_dir = tempfile::tempdir().unwrap();
         write_requirements(
             system_dir.path(),
@@ -258,7 +264,13 @@ timeout = 5
     /// The shape: command hooks with `timeout: 5`, `PreToolUse` with `matcher: "*"` and two hooks in one group, and matcher-less lifecycle groups.
     /// The two `PreToolUse` hooks are byte-identical, so both parse but content dedup registers one effective hook.
     #[test]
+    #[serial_test::serial]
     fn enterprise_policy_hooks_shape_registers() {
+        // The user tier of hook sources hangs off $HOME; the host running the suite has its own
+        // ~/.cursor and ~/.claude files, which must not leak into a fixture about the
+        // requirements layer.
+        let isolated_home = tempfile::tempdir().unwrap();
+        let _home = xai_grok_test_support::EnvGuard::set("HOME", isolated_home.path());
         let system_dir = tempfile::tempdir().unwrap();
         write_requirements(
             system_dir.path(),

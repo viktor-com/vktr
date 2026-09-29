@@ -46,6 +46,53 @@ pub(crate) fn pending_diamond_color(theme: &Theme, accent: Color, tick: u64) -> 
         .unwrap_or(accent)
 }
 
+/// Ticks per full lap of the spinner's gradient cycle (~3 s at the ~30 fps animation tick).
+const BRAND_SPINNER_CYCLE: u64 = 96;
+/// Ticks per label sweep, including the pause while the highlight is off either end (~2.4 s).
+const LABEL_SWEEP_TICKS: u64 = 72;
+/// Half-width of the label highlight, in cells.
+const LABEL_SWEEP_HALF_WIDTH: f32 = 4.0;
+/// Cells the highlight travels past each end of the label, so it enters and leaves cleanly and the label rests between sweeps.
+const LABEL_SWEEP_OVERSHOOT: f32 = 8.0;
+
+/// The working spinner's color: a smooth back-and-forth along the bright part of the brand gradient.
+/// The gradient's dark start is skipped so the glyph stays legible on the background.
+pub(crate) fn brand_spinner_color(theme: &Theme, tick: u64) -> Color {
+    let phase = (tick % BRAND_SPINNER_CYCLE) as f32 / BRAND_SPINNER_CYCLE as f32;
+    let wave = 0.5 - 0.5 * (phase * std::f32::consts::TAU).cos();
+    theme.brand_gradient_at(0.35 + 0.6 * wave)
+}
+
+/// Sweep a soft brand-gradient highlight left to right across the status label in `area`.
+/// Each cell under the highlight takes the gradient color for its position along the label, blended over the label's resting color, so the text reads as the gradient flowing through it.
+/// Named ANSI colors (16-color terminals) have no RGB to blend, so the label stays at rest there.
+fn paint_label_shimmer(buf: &mut Buffer, area: Rect, theme: &Theme, tick: u64) {
+    if area.width == 0 {
+        return;
+    }
+    let len = area.width as f32;
+    let travel = len + 2.0 * LABEL_SWEEP_OVERSHOOT;
+    let phase = (tick % LABEL_SWEEP_TICKS) as f32 / LABEL_SWEEP_TICKS as f32;
+    let center = phase * travel - LABEL_SWEEP_OVERSHOOT;
+    for col in 0..area.width {
+        let d = ((col as f32 + 0.5) - center).abs() / LABEL_SWEEP_HALF_WIDTH;
+        if d >= 1.0 {
+            continue;
+        }
+        let strength = (1.0 - d * d).powi(2);
+        let along = 0.4 + 0.55 * (col as f32 / (len - 1.0).max(1.0));
+        let Some(cell) = buf.cell_mut((area.x + col, area.y)) else {
+            continue;
+        };
+        let rest = cell.fg;
+        if let Some(fg) =
+            crate::render::color::blend_color(rest, theme.brand_gradient_at(along), strength)
+        {
+            cell.set_fg(fg);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Output
 // ---------------------------------------------------------------------------
@@ -422,9 +469,21 @@ pub fn render_turn_status(
     // Spinner color: usually inherits the activity color (green for tools, secondary for thinking/responding, yellow for retries)
     // While the tool is parked on the user we render `◆` pulsing smoothly from dim to bright in `accent_user`
     // That matches the drain-blocked and plan-approval indicators, so every "your turn" status has the same visual cadence
+    // Model-side waits (Thinking, Responding, Compacting, …) wear the brand: the spinner cycles the brand gradient and a highlight sweeps the label
+    // Tools, retries and cancels keep their semantic colors
+    let brand_shimmer = !is_tool
+        && !is_pending_user_input
+        && activity_style.fg == Some(theme.text_secondary)
+        && matches!(
+            state,
+            AgentState::TurnRunning | AgentState::CommandRunning { .. }
+        )
+        && !crate::glyphs::is_legacy_windows_console();
     let spinner_style = if is_pending_user_input {
         let diamond_color = pending_diamond_color(&theme, theme.accent_user, tick);
         Style::default().fg(diamond_color)
+    } else if brand_shimmer {
+        activity_style.fg(brand_spinner_color(&theme, tick))
     } else {
         activity_style
     };
@@ -432,6 +491,7 @@ pub fn render_turn_status(
 
     // Activity label (potentially truncated)
     let mut queued_hint: Option<Span<'static>> = None;
+    let mut label_cols: u16 = 0;
     if is_tool {
         if let Some(TurnActivity::ToolRunning { title, description }) = activity {
             if is_asking {
@@ -497,10 +557,12 @@ pub fn render_turn_status(
             String::new()
         };
         if !suffix.is_empty() && label.width() + suffix.width() <= available_for_label {
+            label_cols = label.width() as u16;
             left_spans.push(Span::styled(label.clone(), activity_style));
             queued_hint = Some(Span::styled(suffix, Style::default().fg(theme.gray)));
         } else {
             let display = truncate_str(&label, available_for_label);
+            label_cols = display.width() as u16;
             left_spans.push(Span::styled(display, activity_style));
         }
     }
@@ -518,6 +580,11 @@ pub fn render_turn_status(
     // Render left side
     let left_line = Line::from(left_spans);
     buf.set_line(area.x, area.y, &left_line, area.width);
+    if brand_shimmer {
+        let x0 = area.x.saturating_add(spinner_width as u16);
+        let cols = label_cols.min(area.right().saturating_sub(x0));
+        paint_label_shimmer(buf, Rect::new(x0, area.y, cols, 1), &theme, tick);
+    }
 
     // ── Render right side: turn_timer + bg + cancel ──
     let right_start_x = area.x + area.width.saturating_sub(right_width as u16);
@@ -948,6 +1015,49 @@ mod tests {
             text.contains("12s"),
             "family-switch compact must show the elapsed timer like /compact, got: {text:?}"
         );
+    }
+
+    fn shimmer_fgs(tick: u64) -> Vec<Color> {
+        let theme = Theme::groknight();
+        let mut buf = Buffer::empty(Rect::new(0, 0, 20, 1));
+        buf.set_string(0, 0, "Thinking…", Style::default().fg(theme.text_secondary));
+        paint_label_shimmer(&mut buf, Rect::new(0, 0, 9, 1), &theme, tick);
+        (0..9).map(|x| buf[(x, 0)].fg).collect()
+    }
+
+    #[test]
+    fn the_label_shimmer_sweeps_through_then_rests() {
+        let rest = Theme::groknight().text_secondary;
+        // Mid-sweep: the highlight is over the label and tints some cells toward the gradient
+        let mid = shimmer_fgs(LABEL_SWEEP_TICKS / 2);
+        assert!(mid.iter().any(|c| *c != rest), "mid-sweep must tint: {mid:?}");
+        assert!(mid.contains(&rest), "the highlight is local, not a flood: {mid:?}");
+        // At the start of a lap the highlight is still off the left end, so the label is at rest
+        assert!(shimmer_fgs(0).iter().all(|c| *c == rest));
+        // It moves: two phases paint differently
+        assert_ne!(shimmer_fgs(LABEL_SWEEP_TICKS / 3), shimmer_fgs(LABEL_SWEEP_TICKS * 2 / 3));
+    }
+
+    #[test]
+    fn the_label_shimmer_leaves_named_ansi_labels_alone() {
+        let theme = Theme::groknight().quantized(crate::theme::color_support::ColorLevel::Basic);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 20, 1));
+        buf.set_string(0, 0, "Thinking…", Style::default().fg(Color::Gray));
+        paint_label_shimmer(&mut buf, Rect::new(0, 0, 9, 1), &theme, LABEL_SWEEP_TICKS / 2);
+        assert!((0..9).all(|x| buf[(x, 0)].fg == Color::Gray));
+    }
+
+    #[test]
+    fn the_brand_spinner_cycles_the_bright_end_of_the_gradient() {
+        let theme = Theme::groknight();
+        let dark_start = theme.brand_gradient_at(0.0);
+        let colors: Vec<Color> = (0..BRAND_SPINNER_CYCLE)
+            .step_by(8)
+            .map(|t| brand_spinner_color(&theme, t))
+            .collect();
+        assert!(colors.iter().all(|c| *c != dark_start));
+        assert!(colors.windows(2).any(|w| w[0] != w[1]), "the color must move");
+        assert_eq!(brand_spinner_color(&theme, 0), brand_spinner_color(&theme, BRAND_SPINNER_CYCLE));
     }
 
     #[test]

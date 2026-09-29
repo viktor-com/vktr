@@ -578,7 +578,7 @@ mod tests {
             snapshot_root: PathBuf::from("/var/lib/repo-fuse/instance/worktrees/abc/root"),
             work_dir: PathBuf::from("/var/lib/repo-fuse/instance/worktrees/abc/work"),
             lower_dir: PathBuf::from("/var/lib/repo-fuse/instance/fuse-lower"),
-            mount_target: PathBuf::from("/home/user/.grok/worktrees/abc"),
+            mount_target: PathBuf::from("/home/user/.vktr/worktrees/abc"),
             created_at: "2026-02-19T22:38:00Z".to_string(),
         };
 

@@ -832,7 +832,8 @@ fn viewer_finalize_stop_reason_to_marker_mapping() {
         Some(SessionEvent::TurnFailed { error, .. }) => {
             assert_eq!(
                 error,
-                "Server error (500): Something went wrong on our side. Wait a minute and send again."
+                // vktr surfaces the server's own text for a 500, never a generic apology.
+                "Server error (500): boom"
             );
         }
         other => panic!("expected TurnFailed, got {other:?}"),

@@ -44,7 +44,10 @@ mod reducer;
 use ext_protocol::{ExtEvent, handle_ext_notification, reply_headless_ext_method};
 use prompt_ack::{abort_unacknowledged_prompt, headless_ack_signal};
 mod cli;
-pub use cli::{HeadlessPrompt, OutputFormat, parse_json_schema, parse_permission_rules_lenient};
+pub use cli::{
+    HeadlessPrompt, OutputFormat, parse_json_schema, parse_permission_rules_lenient,
+    read_piped_stdin,
+};
 pub(crate) use cli::{ResolvedAgent, resolve_agent_arg};
 use cli::{apply_agent_flag, parse_cli_agents, parse_comma_list, parse_permission_rules_strict};
 #[derive(Debug, Clone)]
@@ -347,8 +350,9 @@ impl HeadlessEmitter {
     }
     /// Emit the terminal error; `stop_reason_override` stamps a Messages stop reason (e.g. `max_tokens`).
     fn on_error(&mut self, message: &str, stop_reason_override: Option<&str>) {
+        ERROR_REPORTED.store(true, std::sync::atomic::Ordering::Relaxed);
         match self.format {
-            OutputFormat::Plain => eprint_line(message),
+            OutputFormat::Plain => eprint_line(&readable_error(message)),
             OutputFormat::Json => {
                 let mut err = serde_json::json!({"type":"error","message": message});
                 if let Some(usage) = &self.usage {
@@ -390,6 +394,10 @@ fn stop_reason_wire(reason: acp::StopReason) -> String {
     }
     .to_string()
 }
+/// Set when headless mode had to deny a tool call it could not ask about; read at the end of the run.
+static HEADLESS_TOOL_DENIED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 fn auto_respond_to_permissions(
     args: &acp::RequestPermissionRequest,
     option_kinds: &[acp::PermissionOptionKind],
@@ -409,17 +417,10 @@ fn auto_respond_to_permissions(
 }
 /// "Not signed in" error message, tailored to the session type.
 fn auth_required_message(interactive: bool) -> String {
-    if interactive {
-        "Not signed in. Run `grok login` to authenticate \
-         (or `grok login --device-code` if no browser is available)."
-            .to_string()
-    } else {
-        "Not signed in. To authenticate without a browser, run:\n  \
-         grok login --device-code\n\n\
-         Alternatively, set the XAI_API_KEY environment variable \
-         or run `grok login` on a machine with a browser."
-            .to_string()
-    }
+    let _ = interactive;
+    "Not signed in. Run `vktr login` and paste a Viktor API key (scope chat:completions), \
+     or set VIKTOR_API_KEY."
+        .to_string()
 }
 /// The same backend switch the TUI applies; the shell unless another backend is enabled.
 async fn spawn_agent(
@@ -754,7 +755,7 @@ async fn apply_headless_model_and_effort(
     .map_err(|e| {
         if let Some(name) = model_name {
             anyhow::anyhow!(
-                "Couldn't set model '{}': {}. Run 'grok models' to see available models.",
+                "Couldn't set model '{}': {}. Run 'vktr models' to see available models.",
                 name,
                 e
             )
@@ -791,7 +792,60 @@ fn headless_materialize_ctx(
     }
 }
 /// Run a headless single-turn prompt: spawn the agent, drive the ACP lifecycle, stream to stdout.
+/// Set once the emitter has shown the run's terminal error, so the caller does not print it again.
+static ERROR_REPORTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// A headless run failed and its error has already been shown to the user in the requested
+/// output format; the process only needs to exit non-zero.
+#[derive(Debug)]
+pub struct ErrorAlreadyReported(pub String);
+
+impl std::fmt::Display for ErrorAlreadyReported {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for ErrorAlreadyReported {}
+
+/// Errors that cross the agent protocol arrive as `Internal error: <json>`, the JSON being a quoted
+/// string (with `\n` escapes) or an object with a `message`. Plain output shows the text inside.
+pub fn readable_error(message: &str) -> String {
+    const MARKER: &str = "Internal error: ";
+    let Some(at) = message.find(MARKER) else {
+        return message.to_owned();
+    };
+    let (prefix, rest) = message.split_at(at);
+    let rest = &rest[MARKER.len()..];
+    match serde_json::from_str::<serde_json::Value>(rest) {
+        Ok(serde_json::Value::String(text)) => format!("{prefix}{text}"),
+        Ok(serde_json::Value::Object(object)) => {
+            match object.get("message").and_then(|m| m.as_str()) {
+                Some(text) => format!("{prefix}{text}"),
+                None => message.to_owned(),
+            }
+        }
+        _ => message.to_owned(),
+    }
+}
+
 pub async fn run_single_turn(
+    prompt: Option<HeadlessPrompt>,
+    verbatim: bool,
+    options: HeadlessOptions,
+) -> Result<()> {
+    run_single_turn_inner(prompt, verbatim, options)
+        .await
+        .map_err(|error| {
+            if ERROR_REPORTED.load(std::sync::atomic::Ordering::Relaxed) {
+                anyhow::Error::new(ErrorAlreadyReported(format!("{error:#}")))
+            } else {
+                error
+            }
+        })
+}
+
+async fn run_single_turn_inner(
     prompt: Option<HeadlessPrompt>,
     verbatim: bool,
     options: HeadlessOptions,
@@ -1389,6 +1443,16 @@ pub async fn run_single_turn(
                 emitter.on_max_turns();
                 emitter.on_end(&stop_reason, sid, rid);
                 Err(anyhow::anyhow!("max turns reached"))
+            } else if stop_reason == "cancelled"
+                && HEADLESS_TOOL_DENIED.load(std::sync::atomic::Ordering::Relaxed)
+            {
+                // vktr: a denied tool call ends the turn as "cancelled". Exit non-zero so scripts
+                // do not mistake an unfinished run for success.
+                emitter.on_end(&stop_reason, sid, rid);
+                Err(anyhow::anyhow!(
+                    "run stopped: a tool call needed approval that headless mode cannot give \
+                     (use --always-approve or --allow '<rule>')"
+                ))
             } else {
                 emitter.on_end(&stop_reason, sid, rid);
                 Ok(())
@@ -1786,9 +1850,32 @@ fn handle_headless_acp_message(
                     )));
                 }
             } else {
-                let _ = req.response_tx.send(Ok(acp::RequestPermissionResponse::new(
-                    acp::RequestPermissionOutcome::Cancelled,
-                )));
+                // vktr: headless mode cannot ask. Upstream cancelled the whole turn here, which ended the run
+                // with exit 0 and no output. Reject the call instead so the model hears "denied" and can
+                // finish its answer, and tell the operator which flag would have allowed it.
+                let title = req
+                    .request
+                    .tool_call
+                    .fields
+                    .title
+                    .clone()
+                    .unwrap_or_else(|| "a tool call".to_string());
+                HEADLESS_TOOL_DENIED.store(true, std::sync::atomic::Ordering::Relaxed);
+                eprintln!(
+                    "vktr: denied `{title}` because headless mode cannot ask for approval. \
+                     Re-run with --always-approve, or allow it with --allow '<rule>'."
+                );
+                let resp = auto_respond_to_permissions(
+                    &req.request,
+                    &[
+                        acp::PermissionOptionKind::RejectOnce,
+                        acp::PermissionOptionKind::RejectAlways,
+                    ],
+                )
+                .unwrap_or_else(|| {
+                    acp::RequestPermissionResponse::new(acp::RequestPermissionOutcome::Cancelled)
+                });
+                let _ = req.response_tx.send(Ok(resp));
             }
         }
         AcpClientMessageBox::ExtNotification(notif) => {
@@ -1817,3 +1904,32 @@ mod background_lifecycle_tests;
 #[cfg(test)]
 #[path = "headless_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod readable_error_tests {
+    use super::readable_error;
+
+    #[test]
+    fn protocol_wrapped_errors_read_as_their_own_text() {
+        assert_eq!(
+            readable_error(
+                "Internal error: \"Unauthorized (401): Invalid API key.\\n\\n  Model: viktor\""
+            ),
+            "Unauthorized (401): Invalid API key.\n\n  Model: viktor"
+        );
+        assert_eq!(
+            readable_error(
+                "Couldn't create session: Internal error: {\"message\": \"boom\", \"http_status\": 502}"
+            ),
+            "Couldn't create session: boom"
+        );
+        assert_eq!(
+            readable_error("Connection closed unexpectedly"),
+            "Connection closed unexpectedly"
+        );
+        assert_eq!(
+            readable_error("Internal error: not json"),
+            "Internal error: not json"
+        );
+    }
+}

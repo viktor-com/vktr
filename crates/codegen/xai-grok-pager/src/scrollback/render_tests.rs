@@ -1648,7 +1648,7 @@ fn markdown_wrapped_project_media_path_fully_linkified() {
     // Regression: imagine-tool prose whose long, percent-encoded media path soft-wraps across rows
     // The whole path must be clickable, not just the leading fragment on the first row
     // Each visual row gets one overlay region, all pointing at the full file:// URL
-    let path = "/Users/alice/.grok/projects/%2FUsers%2Falice%2Fcode%2Fxai/\
+    let path = "/Users/alice/.vktr/projects/%2FUsers%2Falice%2Fcode%2Fxai/\
                 019e0000-0000-7000-8000-000000000001/images/1.jpg";
     let entries = vec![make_markdown_entry(&format!(
         "Image generated and saved to {path}\n"

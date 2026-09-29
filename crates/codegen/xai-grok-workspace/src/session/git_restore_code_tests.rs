@@ -1417,7 +1417,15 @@ async fn ensure_binding_forks_conv_branch_off_base_and_is_idempotent() {
             .await
             .unwrap()
     );
-    assert_eq!(Some(main_sha.clone()), res.head_sha);
+    // The fresh branch seeds and commits a default .gitignore (the fixture has none), so HEAD
+    // is one commit past the base, with the base as its parent.
+    let head = git_cli(&work, &["rev-parse", "HEAD"]).await.unwrap();
+    assert_eq!(Some(head.clone()), res.head_sha);
+    assert_eq!(
+        main_sha,
+        git_cli(&work, &["rev-parse", "HEAD~1"]).await.unwrap(),
+        "conv branch must fork off the base"
+    );
     std::fs::write(work.join("f.txt"), "x").unwrap();
     git_cli(&work, &["add", "-A"]).await.unwrap();
     git_cli(&work, &["commit", "-m", "conv work"])

@@ -479,7 +479,7 @@ Inside a subagent, the gate fires as `SubagentStop` (agent-frontmatter `Stop` ho
 - **StopFailure classes**: vktr emits six (`rate_limit`, `authentication_failed`, `invalid_request`, `server_error`, `max_output_tokens`, `unknown`). Capacity errors (503/529) classify as `rate_limit`. A matcher on an error class vktr does not emit never fires.
 - **Default timeout**: vktr defaults observe hooks to 5 seconds, which is shorter than most. Set `timeout` explicitly on an imported hook that does real work.
 - **`UserPromptSubmit` blocks, with one gap**: exit 2 and `decision: "block"` reject the prompt like Claude, and a blocked prompt never enters the conversation history — but an allowing hook's stdout / `additionalContext` is discarded rather than added as context.
-- **`StopCancelled` is grok-specific**: a config that uses it is not portable to a runtime with no interrupt hook.
+- **`StopCancelled` is vktr-specific**: a config that uses it is not portable to a runtime with no interrupt hook.
 - **`idle_prompt` fires on any turn end**: vktr fires it after an interrupted or errored turn too, not only a completed one, because it reports a state rather than an outcome. Its `message` is display text and can change between releases, so match on `notificationType` instead.
 - **Subagent identity is `subagentType`, not `agent_type`**: vktr puts it in the payload of the events that can fire inside a subagent, matching its own `SubagentStart`/`SubagentStop`, rather than in the common fields.
 - **permission_mode values**: vktr emits `default`, `auto`, `plan`, or `bypassPermissions`. Claude's `acceptEdits`/`dontAsk` have no vktr equivalent (vktr's `auto` is the nearest), so a check like `permission_mode === "acceptEdits"` never matches.
@@ -561,7 +561,7 @@ Both `command` and `url` support `${VAR}` and `$VAR` expansion. On Windows Power
 Instead of a local script, call a remote endpoint:
 
 ```json
-{ "type": "http", "url": "https://hooks.example.com/grok-event", "timeout": 15 }
+{ "type": "http", "url": "https://hooks.example.com/vktr-event", "timeout": 15 }
 ```
 
 The full event envelope is POSTed as JSON.
@@ -688,4 +688,4 @@ echo '{"decision": "allow"}'
 - **Hook not running?** Press `Ctrl+L` on non–VS Code family (or run `/hooks` anywhere) to see if it is loaded and matched.
 - **Project hooks ignored?** The folder may be untrusted. Run `/hooks-trust` (or relaunch with `--trust`).
 - **Script not found?** Check the path is relative to the `.json` file and executable (`chmod +x`).
-- **See errors?** Capture logs by launching with `RUST_LOG=debug VKTR_LOG_FILE=/tmp/grok.log vktr`, then check `/tmp/grok.log`.
+- **See errors?** Capture logs by launching with `RUST_LOG=debug VKTR_LOG_FILE=/tmp/vktr.log vktr`, then check `/tmp/vktr.log`.

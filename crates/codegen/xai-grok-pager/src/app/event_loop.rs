@@ -1172,13 +1172,8 @@ pub(crate) async fn run(
         .and_then(|s| s.show_resolved_model)
         .unwrap_or(true);
     app.sharing_enabled = false;
-    app.privacy_notice_rollout = xai_grok_config::env_bool("VKTR_PRIVACY_NOTICE_ROLLOUT")
-        .or_else(|| {
-            remote_settings
-                .as_ref()
-                .and_then(|s| s.privacy_notice_rollout)
-        })
-        .unwrap_or(false);
+    // The banner asks to share coding data with the upstream vendor; vktr never does, so it stays off.
+    app.privacy_notice_rollout = false;
     app.privacy_banner_reshow_days = std::env::var("VKTR_PRIVACY_BANNER_RESHOW_DAYS")
         .ok()
         .and_then(|v| v.trim().parse().ok())

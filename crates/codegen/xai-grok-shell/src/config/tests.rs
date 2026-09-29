@@ -1099,11 +1099,12 @@ fn with_grok_subagents<T>(value: &str, f: impl FnOnce() -> T) -> T {
     with_env_var_opt("VKTR_SUBAGENTS", Some(value), f)
 }
 #[test]
-fn subagents_config_default_enabled() {
+fn subagents_config_default_follows_the_lean_toolset() {
     without_grok_subagents(|| {
         let config = toml::Value::Table(toml::map::Map::new());
         let sa = SubagentsConfig::resolve(false, &config);
-        assert!(sa.enabled);
+        // vktr leaves subagents off unless VKTR_FULL_TOOLSET=1 (each one is a billed Viktor run).
+        assert_eq!(sa.enabled, crate::agent::config::full_toolset());
     });
 }
 #[test]
@@ -1345,7 +1346,7 @@ fn subagents_config_remote_settings_key_is_ignored() {
             .expect("unknown subagents_enabled key must not break parsing");
         let config = toml::Value::Table(toml::map::Map::new());
         let sa = SubagentsConfig::resolve(false, &config);
-        assert!(sa.enabled);
+        assert_eq!(sa.enabled, crate::agent::config::full_toolset());
     });
 }
 #[test]
@@ -2360,7 +2361,7 @@ fn roles_parse_from_toml() {
             [roles.implementer]
             description = "Implementation agent"
             default_capability_mode = "all"
-            prompt_file = ".grok/prompts/impl.md"
+            prompt_file = ".vktr/prompts/impl.md"
         "#;
     let cfg: SubagentsConfig = toml::from_str(toml_str).unwrap();
     assert_eq!(cfg.roles.len(), 2);
@@ -2466,7 +2467,7 @@ fn validate_roles_accepts_valid_prompt_file() {
     let toml_str = r#"
             [roles.ok]
             description = "Valid prompt file"
-            prompt_file = ".grok/prompts/ok.md"
+            prompt_file = ".vktr/prompts/ok.md"
         "#;
     let cfg: SubagentsConfig = toml::from_str(toml_str).unwrap();
     assert!(cfg.validate_roles().is_empty());
@@ -2540,7 +2541,7 @@ fn personas_parse_from_toml() {
 
             [personas.concise]
             instructions = "Be concise."
-            instructions_file = ".grok/personas/concise.md"
+            instructions_file = ".vktr/personas/concise.md"
         "#;
     let cfg: SubagentsConfig = toml::from_str(toml_str).unwrap();
     assert_eq!(cfg.personas.len(), 2);

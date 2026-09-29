@@ -146,7 +146,7 @@ The operations below are treated as read-only and run without prompting, in ever
 - `read_file`
 - `list_dir`
 - `grep` (content search)
-- `web_search`
+- `web_search` (xAI-backed; off unless `VKTR_XAI_BACKED_TOOLS=1`)
 - `todo_write`
 - `get_command_or_subagent_output` / `kill_command_or_subagent` (subagent control)
 - Invoking skills

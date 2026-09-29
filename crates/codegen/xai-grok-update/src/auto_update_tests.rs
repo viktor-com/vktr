@@ -2,10 +2,10 @@ use super::*;
 
 #[test]
 fn test_tmp_download_path_is_unique_per_version_and_per_attempt() {
-    // The old `with_extension("tmp")` collapsed every 0.1.x versioned name onto a single `grok-0.1.tmp`
+    // The old `with_extension("tmp")` collapsed every 0.1.x versioned name onto a single `vktr-0.1.tmp`
     // The helper must keep distinct versions distinct AND make repeated attempts (same process, e.g. concurrent tokio tasks) unique.
-    let dest_181 = std::path::Path::new("/home/u/.vktr/downloads/grok-0.1.181-linux-x86_64");
-    let dest_182 = std::path::Path::new("/home/u/.vktr/downloads/grok-0.1.182-linux-x86_64");
+    let dest_181 = std::path::Path::new("/home/u/.vktr/downloads/vktr-0.1.181-linux-x86_64");
+    let dest_182 = std::path::Path::new("/home/u/.vktr/downloads/vktr-0.1.182-linux-x86_64");
 
     let a = tmp_download_path(dest_181);
     let b = tmp_download_path(dest_182);
@@ -19,7 +19,7 @@ fn test_tmp_download_path_is_unique_per_version_and_per_attempt() {
 
     let name = a.file_name().unwrap().to_string_lossy().to_string();
     assert!(
-        name.starts_with("grok-0.1.181-linux-x86_64."),
+        name.starts_with("vktr-0.1.181-linux-x86_64."),
         "full versioned name must be preserved: {name}"
     );
     assert!(
@@ -213,32 +213,32 @@ fn test_installer_manages_bin_entrypoints_gate() {
 #[tokio::test]
 async fn test_reconcile_agent_repoints_diverged_agent() {
     let (_dir, bin, downloads) = managed_layout();
-    std::fs::write(downloads.join("grok-0.2.101-macos-aarch64"), "new").unwrap();
-    std::fs::write(downloads.join("grok-0.1.199-macos-aarch64"), "old").unwrap();
+    std::fs::write(downloads.join("vktr-0.2.101-macos-aarch64"), "new").unwrap();
+    std::fs::write(downloads.join("vktr-0.1.199-macos-aarch64"), "old").unwrap();
 
-    std::os::unix::fs::symlink("../downloads/grok-0.2.101-macos-aarch64", bin.join("vktr"))
+    std::os::unix::fs::symlink("../downloads/vktr-0.2.101-macos-aarch64", bin.join("vktr"))
         .unwrap();
-    std::os::unix::fs::symlink("../downloads/grok-0.1.199-macos-aarch64", bin.join("agent"))
+    std::os::unix::fs::symlink("../downloads/vktr-0.1.199-macos-aarch64", bin.join("agent"))
         .unwrap();
 
     reconcile_agent_to_grok(&bin).await;
 
     assert_eq!(
         std::fs::read_link(bin.join("agent")).unwrap(),
-        std::path::PathBuf::from("../downloads/grok-0.2.101-macos-aarch64"),
+        std::path::PathBuf::from("../downloads/vktr-0.2.101-macos-aarch64"),
     );
     assert_eq!(std::fs::read_to_string(bin.join("agent")).unwrap(), "new");
-    assert!(downloads.join("grok-0.1.199-macos-aarch64").exists());
+    assert!(downloads.join("vktr-0.1.199-macos-aarch64").exists());
 }
 
 #[cfg(unix)]
 #[tokio::test]
 async fn test_reconcile_agent_heals_legacy_unversioned_agent() {
     let (_dir, bin, downloads) = managed_layout();
-    std::fs::write(downloads.join("grok-0.2.101-macos-aarch64"), "new").unwrap();
-    std::fs::write(downloads.join("grok-macos-aarch64"), "legacy").unwrap();
+    std::fs::write(downloads.join("vktr-0.2.101-macos-aarch64"), "new").unwrap();
+    std::fs::write(downloads.join("vktr-macos-aarch64"), "legacy").unwrap();
 
-    std::os::unix::fs::symlink("../downloads/grok-0.2.101-macos-aarch64", bin.join("vktr"))
+    std::os::unix::fs::symlink("../downloads/vktr-0.2.101-macos-aarch64", bin.join("vktr"))
         .unwrap();
     std::os::unix::fs::symlink("../downloads/grok-macos-aarch64", bin.join("agent")).unwrap();
 
@@ -246,7 +246,7 @@ async fn test_reconcile_agent_heals_legacy_unversioned_agent() {
 
     assert_eq!(
         std::fs::read_link(bin.join("agent")).unwrap(),
-        std::path::PathBuf::from("../downloads/grok-0.2.101-macos-aarch64"),
+        std::path::PathBuf::from("../downloads/vktr-0.2.101-macos-aarch64"),
     );
     assert_eq!(std::fs::read_to_string(bin.join("agent")).unwrap(), "new");
 }
@@ -255,8 +255,8 @@ async fn test_reconcile_agent_heals_legacy_unversioned_agent() {
 #[tokio::test]
 async fn test_reconcile_agent_creates_missing_agent() {
     let (_dir, bin, downloads) = managed_layout();
-    std::fs::write(downloads.join("grok-0.2.101-macos-aarch64"), "new").unwrap();
-    std::os::unix::fs::symlink("../downloads/grok-0.2.101-macos-aarch64", bin.join("vktr"))
+    std::fs::write(downloads.join("vktr-0.2.101-macos-aarch64"), "new").unwrap();
+    std::os::unix::fs::symlink("../downloads/vktr-0.2.101-macos-aarch64", bin.join("vktr"))
         .unwrap();
 
     reconcile_agent_to_grok(&bin).await;
@@ -269,8 +269,8 @@ async fn test_reconcile_agent_creates_missing_agent() {
 #[tokio::test]
 async fn test_reconcile_agent_noop_when_consistent() {
     let (_dir, bin, downloads) = managed_layout();
-    std::fs::write(downloads.join("grok-0.2.101-macos-aarch64"), "new").unwrap();
-    let target = "../downloads/grok-0.2.101-macos-aarch64";
+    std::fs::write(downloads.join("vktr-0.2.101-macos-aarch64"), "new").unwrap();
+    let target = "../downloads/vktr-0.2.101-macos-aarch64";
     std::os::unix::fs::symlink(target, bin.join("vktr")).unwrap();
     std::os::unix::fs::symlink(target, bin.join("agent")).unwrap();
 
@@ -292,17 +292,17 @@ async fn test_reconcile_agent_noop_when_consistent() {
 #[tokio::test]
 async fn test_reconcile_agent_skips_when_grok_dangling() {
     let (_dir, bin, downloads) = managed_layout();
-    std::os::unix::fs::symlink("../downloads/grok-0.2.101-macos-aarch64", bin.join("vktr"))
+    std::os::unix::fs::symlink("../downloads/vktr-0.2.101-macos-aarch64", bin.join("vktr"))
         .unwrap();
-    std::fs::write(downloads.join("grok-0.1.199-macos-aarch64"), "old").unwrap();
-    std::os::unix::fs::symlink("../downloads/grok-0.1.199-macos-aarch64", bin.join("agent"))
+    std::fs::write(downloads.join("vktr-0.1.199-macos-aarch64"), "old").unwrap();
+    std::os::unix::fs::symlink("../downloads/vktr-0.1.199-macos-aarch64", bin.join("agent"))
         .unwrap();
 
     reconcile_agent_to_grok(&bin).await;
 
     assert_eq!(
         std::fs::read_link(bin.join("agent")).unwrap(),
-        std::path::PathBuf::from("../downloads/grok-0.1.199-macos-aarch64"),
+        std::path::PathBuf::from("../downloads/vktr-0.1.199-macos-aarch64"),
     );
 }
 
@@ -311,15 +311,15 @@ async fn test_reconcile_agent_skips_when_grok_dangling() {
 async fn test_reconcile_agent_skips_when_grok_not_symlink() {
     let (_dir, bin, downloads) = managed_layout();
     std::fs::write(bin.join("vktr"), "copy-binary").unwrap();
-    std::fs::write(downloads.join("grok-0.1.199-macos-aarch64"), "old").unwrap();
-    std::os::unix::fs::symlink("../downloads/grok-0.1.199-macos-aarch64", bin.join("agent"))
+    std::fs::write(downloads.join("vktr-0.1.199-macos-aarch64"), "old").unwrap();
+    std::os::unix::fs::symlink("../downloads/vktr-0.1.199-macos-aarch64", bin.join("agent"))
         .unwrap();
 
     reconcile_agent_to_grok(&bin).await;
 
     assert_eq!(
         std::fs::read_link(bin.join("agent")).unwrap(),
-        std::path::PathBuf::from("../downloads/grok-0.1.199-macos-aarch64"),
+        std::path::PathBuf::from("../downloads/vktr-0.1.199-macos-aarch64"),
     );
 }
 
@@ -333,8 +333,8 @@ async fn test_sweep_stale_tmp_links_removes_stale_keeps_fresh_and_active() {
     std::os::unix::fs::symlink(&target, &link).unwrap();
 
     // Old- and new-style leftover temp links.
-    let leftover_old = dir.path().join("grok.tmp-link");
-    let leftover_new = dir.path().join("grok.123-0.tmp-link");
+    let leftover_old = dir.path().join("vktr.tmp-link");
+    let leftover_new = dir.path().join("vktr.123-0.tmp-link");
     std::os::unix::fs::symlink(&target, &leftover_old).unwrap();
     std::os::unix::fs::symlink(&target, &leftover_new).unwrap();
 
@@ -388,16 +388,16 @@ async fn test_atomic_symlink_swap_with_relative_target() {
     std::fs::create_dir_all(&downloads).unwrap();
     std::fs::create_dir_all(&bin).unwrap();
 
-    std::fs::write(downloads.join("grok-0.1.203"), "v203").unwrap();
+    std::fs::write(downloads.join("vktr-0.1.203"), "v203").unwrap();
 
-    let rel_target = std::path::Path::new("../downloads/grok-0.1.203");
+    let rel_target = std::path::Path::new("../downloads/vktr-0.1.203");
     let link = bin.join("vktr");
     atomic_symlink_swap(rel_target, &link).await.unwrap();
 
     assert!(link.is_symlink());
     assert_eq!(
         std::fs::read_link(&link).unwrap(),
-        std::path::PathBuf::from("../downloads/grok-0.1.203")
+        std::path::PathBuf::from("../downloads/vktr-0.1.203")
     );
     assert_eq!(std::fs::read_to_string(&link).unwrap(), "v203");
 }
@@ -405,37 +405,37 @@ async fn test_atomic_symlink_swap_with_relative_target() {
 #[cfg(unix)]
 #[test]
 fn test_relative_symlink_target_sibling_dirs() {
-    // bin/grok -> ../downloads/grok-0.1.203
-    let target = std::path::Path::new("/home/alice/.vktr/downloads/grok-0.1.203");
+    // bin/grok -> ../downloads/vktr-0.1.203
+    let target = std::path::Path::new("/home/alice/.vktr/downloads/vktr-0.1.203");
     let link = std::path::Path::new("/home/alice/.vktr/bin/grok");
     let result = relative_symlink_target(target, link);
     assert_eq!(
         result,
-        std::path::PathBuf::from("../downloads/grok-0.1.203")
+        std::path::PathBuf::from("../downloads/vktr-0.1.203")
     );
 }
 
 #[cfg(unix)]
 #[test]
 fn test_relative_symlink_target_same_dir() {
-    // downloads/grok-latest -> grok-0.1.203 (same directory)
-    let target = std::path::Path::new("/home/alice/.vktr/downloads/grok-0.1.203");
-    let link = std::path::Path::new("/home/alice/.vktr/downloads/grok-latest");
+    // downloads/vktr-latest -> vktr-0.1.203 (same directory)
+    let target = std::path::Path::new("/home/alice/.vktr/downloads/vktr-0.1.203");
+    let link = std::path::Path::new("/home/alice/.vktr/downloads/vktr-latest");
     let result = relative_symlink_target(target, link);
-    assert_eq!(result, std::path::PathBuf::from("grok-0.1.203"));
+    assert_eq!(result, std::path::PathBuf::from("vktr-0.1.203"));
 }
 
 #[cfg(unix)]
 #[test]
 fn test_relative_symlink_target_cross_tree_stays_absolute() {
-    // /usr/local/bin/grok -> /home/alice/.vktr/downloads/grok-0.1.203
+    // /usr/local/bin/grok -> /home/alice/.vktr/downloads/vktr-0.1.203
     // Different grandparents, so the target should stay absolute
-    let target = std::path::Path::new("/home/alice/.vktr/downloads/grok-0.1.203");
+    let target = std::path::Path::new("/home/alice/.vktr/downloads/vktr-0.1.203");
     let link = std::path::Path::new("/usr/local/bin/grok");
     let result = relative_symlink_target(target, link);
     assert_eq!(
         result,
-        std::path::PathBuf::from("/home/alice/.vktr/downloads/grok-0.1.203")
+        std::path::PathBuf::from("/home/alice/.vktr/downloads/vktr-0.1.203")
     );
 }
 
@@ -452,10 +452,10 @@ async fn test_relative_symlink_survives_directory_move() {
     let alice_bin = alice.join("bin");
     std::fs::create_dir_all(&alice_downloads).unwrap();
     std::fs::create_dir_all(&alice_bin).unwrap();
-    std::fs::write(alice_downloads.join("grok-0.1.203"), "binary-content").unwrap();
+    std::fs::write(alice_downloads.join("vktr-0.1.203"), "binary-content").unwrap();
 
     // Create a relative symlink (what relative_symlink_target produces)
-    let rel_target = std::path::Path::new("../downloads/grok-0.1.203");
+    let rel_target = std::path::Path::new("../downloads/vktr-0.1.203");
     let link = alice_bin.join("vktr");
     atomic_symlink_swap(rel_target, &link).await.unwrap();
 
@@ -477,7 +477,7 @@ async fn test_relative_symlink_survives_directory_move() {
     assert!(bob_link.is_symlink());
     assert_eq!(
         std::fs::read_link(&bob_link).unwrap(),
-        std::path::PathBuf::from("../downloads/grok-0.1.203"),
+        std::path::PathBuf::from("../downloads/vktr-0.1.203"),
         "symlink target should be relative"
     );
     assert_eq!(
@@ -600,33 +600,33 @@ async fn test_cleanup_old_downloads_keeps_current_plus_one() {
 
     // Simulate 5 old vktr binaries in downloads dir.
     for v in ["0.1.140", "0.1.141", "0.1.142", "0.1.143", "0.1.144"] {
-        std::fs::write(d.join(format!("grok-{}-macos-aarch64", v)), v).unwrap();
+        std::fs::write(d.join(format!("vktr-{}-macos-aarch64", v)), v).unwrap();
     }
-    std::fs::write(d.join("grok-0.1.145-macos-aarch64"), "current").unwrap();
+    std::fs::write(d.join("vktr-0.1.145-macos-aarch64"), "current").unwrap();
 
     make_all_stale(d);
 
     cleanup_old_downloads(d, "vktr", "0.1.145").await;
 
     // Current must survive.
-    assert!(d.join("grok-0.1.145-macos-aarch64").exists(), "current");
+    assert!(d.join("vktr-0.1.145-macos-aarch64").exists(), "current");
     // Newest old version (0.1.144) must survive.
-    assert!(d.join("grok-0.1.144-macos-aarch64").exists(), "N-1");
+    assert!(d.join("vktr-0.1.144-macos-aarch64").exists(), "N-1");
     // Everything else should be deleted.
     assert!(
-        !d.join("grok-0.1.143-macos-aarch64").exists(),
+        !d.join("vktr-0.1.143-macos-aarch64").exists(),
         "0.1.143 should be deleted"
     );
     assert!(
-        !d.join("grok-0.1.142-macos-aarch64").exists(),
+        !d.join("vktr-0.1.142-macos-aarch64").exists(),
         "0.1.142 should be deleted"
     );
     assert!(
-        !d.join("grok-0.1.141-macos-aarch64").exists(),
+        !d.join("vktr-0.1.141-macos-aarch64").exists(),
         "0.1.141 should be deleted"
     );
     assert!(
-        !d.join("grok-0.1.140-macos-aarch64").exists(),
+        !d.join("vktr-0.1.140-macos-aarch64").exists(),
         "0.1.140 should be deleted"
     );
 }
@@ -637,8 +637,8 @@ async fn test_cleanup_old_downloads_does_not_touch_other_binaries() {
     let d = dir.path();
 
     // vktr and grok-pager should not interfere with each other.
-    std::fs::write(d.join("grok-0.1.140-macos-aarch64"), "old-grok").unwrap();
-    std::fs::write(d.join("grok-0.1.141-macos-aarch64"), "current-grok").unwrap();
+    std::fs::write(d.join("vktr-0.1.140-macos-aarch64"), "old-grok").unwrap();
+    std::fs::write(d.join("vktr-0.1.141-macos-aarch64"), "current-grok").unwrap();
     std::fs::write(d.join("grok-pager-0.1.140-macos-aarch64"), "old-pager").unwrap();
     std::fs::write(d.join("grok-pager-0.1.141-macos-aarch64"), "current-pager").unwrap();
 
@@ -647,8 +647,8 @@ async fn test_cleanup_old_downloads_does_not_touch_other_binaries() {
 
     cleanup_old_downloads(d, "vktr", "0.1.141").await;
 
-    assert!(d.join("grok-0.1.141-macos-aarch64").exists());
-    assert!(d.join("grok-0.1.140-macos-aarch64").exists()); // only old, kept as N-1
+    assert!(d.join("vktr-0.1.141-macos-aarch64").exists());
+    assert!(d.join("vktr-0.1.140-macos-aarch64").exists()); // only old, kept as N-1
     assert!(
         d.join("grok-pager-0.1.140-macos-aarch64").exists(),
         "pager untouched"
@@ -685,24 +685,24 @@ async fn test_cleanup_old_downloads_removes_stale_tmp_keeps_fresh_tmp() {
     let d = dir.path();
 
     // Stale tmp: abandoned by a crashed updater, so it is swept
-    std::fs::write(d.join("grok-0.1.140-macos-aarch64.tmp"), "partial").unwrap();
-    make_stale(&d.join("grok-0.1.140-macos-aarch64.tmp"));
+    std::fs::write(d.join("vktr-0.1.140-macos-aarch64.tmp"), "partial").unwrap();
+    make_stale(&d.join("vktr-0.1.140-macos-aarch64.tmp"));
     // Fresh tmp: a concurrent updater's in-flight download is kept, or its atomic rename would fail with ENOENT
-    std::fs::write(d.join("grok-0.1.142-macos-aarch64.77-0.tmp"), "inflight").unwrap();
-    std::fs::write(d.join("grok-0.1.141-macos-aarch64"), "current").unwrap();
+    std::fs::write(d.join("vktr-0.1.142-macos-aarch64.77-0.tmp"), "inflight").unwrap();
+    std::fs::write(d.join("vktr-0.1.141-macos-aarch64"), "current").unwrap();
 
     cleanup_old_downloads(d, "vktr", "0.1.141").await;
 
     assert!(
-        !d.join("grok-0.1.140-macos-aarch64.tmp").exists(),
+        !d.join("vktr-0.1.140-macos-aarch64.tmp").exists(),
         "stale tmp cleaned up"
     );
     assert!(
-        d.join("grok-0.1.142-macos-aarch64.77-0.tmp").exists(),
+        d.join("vktr-0.1.142-macos-aarch64.77-0.tmp").exists(),
         "fresh in-flight tmp must NOT be swept"
     );
     assert!(
-        d.join("grok-0.1.141-macos-aarch64").exists(),
+        d.join("vktr-0.1.141-macos-aarch64").exists(),
         "current kept"
     );
 }
@@ -716,23 +716,23 @@ async fn test_cleanup_old_downloads_keeps_fresh_versioned_binary() {
 
     // Three old versions and the current: policy would delete .138 and .139
     for v in ["0.1.138", "0.1.139", "0.1.140"] {
-        std::fs::write(d.join(format!("grok-{v}-macos-aarch64")), v).unwrap();
+        std::fs::write(d.join(format!("vktr-{v}-macos-aarch64")), v).unwrap();
     }
-    std::fs::write(d.join("grok-0.1.141-macos-aarch64"), "current").unwrap();
+    std::fs::write(d.join("vktr-0.1.141-macos-aarch64"), "current").unwrap();
     make_all_stale(d);
     // .138 is re-written NOW, simulating a racer that just renamed its download into place (e.g. a rollback install racing an upgrade).
-    std::fs::write(d.join("grok-0.1.138-macos-aarch64"), "in-flight").unwrap();
+    std::fs::write(d.join("vktr-0.1.138-macos-aarch64"), "in-flight").unwrap();
 
     cleanup_old_downloads(d, "vktr", "0.1.141").await;
 
-    assert!(d.join("grok-0.1.141-macos-aarch64").exists(), "current");
-    assert!(d.join("grok-0.1.140-macos-aarch64").exists(), "N-1 kept");
+    assert!(d.join("vktr-0.1.141-macos-aarch64").exists(), "current");
+    assert!(d.join("vktr-0.1.140-macos-aarch64").exists(), "N-1 kept");
     assert!(
-        d.join("grok-0.1.138-macos-aarch64").exists(),
+        d.join("vktr-0.1.138-macos-aarch64").exists(),
         "fresh just-renamed binary must NOT be deleted"
     );
     assert!(
-        !d.join("grok-0.1.139-macos-aarch64").exists(),
+        !d.join("vktr-0.1.139-macos-aarch64").exists(),
         "genuinely old binary still swept"
     );
 }
@@ -743,17 +743,17 @@ async fn test_cleanup_old_downloads_skips_symlinks() {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
 
-    // grok-latest is a symlink, so it must be skipped
-    let target = d.join("grok-0.1.141-macos-aarch64");
+    // vktr-latest is a symlink, so it must be skipped
+    let target = d.join("vktr-0.1.141-macos-aarch64");
     std::fs::write(&target, "current").unwrap();
-    std::os::unix::fs::symlink(&target, d.join("grok-latest")).unwrap();
+    std::os::unix::fs::symlink(&target, d.join("vktr-latest")).unwrap();
 
     make_all_stale(d);
 
     cleanup_old_downloads(d, "vktr", "0.1.141").await;
 
     assert!(
-        d.join("grok-latest").exists(),
+        d.join("vktr-latest").exists(),
         "symlink must not be deleted"
     );
     assert!(target.exists(), "current must not be deleted");
@@ -764,10 +764,10 @@ async fn test_cleanup_old_downloads_version_prefix_collision() {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
 
-    std::fs::write(d.join("grok-0.1.14-macos-aarch64"), "current").unwrap();
-    std::fs::write(d.join("grok-0.1.140-macos-aarch64"), "old-140").unwrap();
-    std::fs::write(d.join("grok-0.1.141-macos-aarch64"), "old-141").unwrap();
-    std::fs::write(d.join("grok-0.1.13-macos-aarch64"), "old-13").unwrap();
+    std::fs::write(d.join("vktr-0.1.14-macos-aarch64"), "current").unwrap();
+    std::fs::write(d.join("vktr-0.1.140-macos-aarch64"), "old-140").unwrap();
+    std::fs::write(d.join("vktr-0.1.141-macos-aarch64"), "old-141").unwrap();
+    std::fs::write(d.join("vktr-0.1.13-macos-aarch64"), "old-13").unwrap();
 
     make_all_stale(d);
 
@@ -775,19 +775,19 @@ async fn test_cleanup_old_downloads_version_prefix_collision() {
 
     // Current must survive.
     assert!(
-        d.join("grok-0.1.14-macos-aarch64").exists(),
+        d.join("vktr-0.1.14-macos-aarch64").exists(),
         "current 0.1.14"
     );
     assert!(
-        d.join("grok-0.1.141-macos-aarch64").exists(),
+        d.join("vktr-0.1.141-macos-aarch64").exists(),
         "N-1 is 0.1.141"
     );
     assert!(
-        !d.join("grok-0.1.140-macos-aarch64").exists(),
+        !d.join("vktr-0.1.140-macos-aarch64").exists(),
         "0.1.140 should be deleted"
     );
     assert!(
-        !d.join("grok-0.1.13-macos-aarch64").exists(),
+        !d.join("vktr-0.1.13-macos-aarch64").exists(),
         "0.1.13 should be deleted"
     );
 }
@@ -821,37 +821,37 @@ async fn test_cleanup_old_downloads_pager_multi_version() {
 
 #[tokio::test]
 async fn test_cleanup_old_downloads_npm_layout() {
-    // npm layout: files are just `grok-{version}` (no platform suffix).
+    // npm layout: files are just `vktr-{version}` (no platform suffix).
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
 
     for v in ["0.1.138", "0.1.139", "0.1.140"] {
-        std::fs::write(d.join(format!("grok-{}", v)), v).unwrap();
+        std::fs::write(d.join(format!("vktr-{}", v)), v).unwrap();
     }
-    std::fs::write(d.join("grok-0.1.141"), "current").unwrap();
+    std::fs::write(d.join("vktr-0.1.141"), "current").unwrap();
 
     make_all_stale(d);
 
     cleanup_old_downloads(d, "vktr", "0.1.141").await;
 
-    assert!(d.join("grok-0.1.141").exists(), "current");
-    assert!(d.join("grok-0.1.140").exists(), "N-1 kept");
-    assert!(!d.join("grok-0.1.139").exists(), "0.1.139 deleted");
-    assert!(!d.join("grok-0.1.138").exists(), "0.1.138 deleted");
+    assert!(d.join("vktr-0.1.141").exists(), "current");
+    assert!(d.join("vktr-0.1.140").exists(), "N-1 kept");
+    assert!(!d.join("vktr-0.1.139").exists(), "0.1.139 deleted");
+    assert!(!d.join("vktr-0.1.138").exists(), "0.1.138 deleted");
 }
 
 #[tokio::test]
 async fn test_cleanup_old_downloads_alpha_versions() {
     // Alpha version filenames include pre-release tags:
-    //   grok-0.1.150-alpha.1-macos-aarch64
+    //   vktr-0.1.150-alpha.1-macos-aarch64
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
 
-    std::fs::write(d.join("grok-0.1.148-alpha.1-macos-aarch64"), "alpha-148-1").unwrap();
-    std::fs::write(d.join("grok-0.1.148-alpha.2-macos-aarch64"), "alpha-148-2").unwrap();
-    std::fs::write(d.join("grok-0.1.149-alpha.1-macos-aarch64"), "alpha-149-1").unwrap();
+    std::fs::write(d.join("vktr-0.1.148-alpha.1-macos-aarch64"), "alpha-148-1").unwrap();
+    std::fs::write(d.join("vktr-0.1.148-alpha.2-macos-aarch64"), "alpha-148-2").unwrap();
+    std::fs::write(d.join("vktr-0.1.149-alpha.1-macos-aarch64"), "alpha-149-1").unwrap();
     // Current version is the newest alpha.
-    std::fs::write(d.join("grok-0.1.150-alpha.1-macos-aarch64"), "current").unwrap();
+    std::fs::write(d.join("vktr-0.1.150-alpha.1-macos-aarch64"), "current").unwrap();
 
     make_all_stale(d);
 
@@ -859,21 +859,21 @@ async fn test_cleanup_old_downloads_alpha_versions() {
 
     // Current must survive.
     assert!(
-        d.join("grok-0.1.150-alpha.1-macos-aarch64").exists(),
+        d.join("vktr-0.1.150-alpha.1-macos-aarch64").exists(),
         "current alpha"
     );
     // Newest old (0.1.149-alpha.1) kept as N-1.
     assert!(
-        d.join("grok-0.1.149-alpha.1-macos-aarch64").exists(),
+        d.join("vktr-0.1.149-alpha.1-macos-aarch64").exists(),
         "N-1 alpha"
     );
     // Older alphas deleted.
     assert!(
-        !d.join("grok-0.1.148-alpha.2-macos-aarch64").exists(),
+        !d.join("vktr-0.1.148-alpha.2-macos-aarch64").exists(),
         "0.1.148-alpha.2 deleted"
     );
     assert!(
-        !d.join("grok-0.1.148-alpha.1-macos-aarch64").exists(),
+        !d.join("vktr-0.1.148-alpha.1-macos-aarch64").exists(),
         "0.1.148-alpha.1 deleted"
     );
 }
@@ -884,30 +884,30 @@ async fn test_cleanup_old_downloads_mixed_stable_and_alpha() {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
 
-    std::fs::write(d.join("grok-0.1.148-macos-aarch64"), "stable-148").unwrap();
-    std::fs::write(d.join("grok-0.1.149-alpha.1-macos-aarch64"), "alpha-149").unwrap();
-    std::fs::write(d.join("grok-0.1.149-macos-aarch64"), "stable-149").unwrap();
+    std::fs::write(d.join("vktr-0.1.148-macos-aarch64"), "stable-148").unwrap();
+    std::fs::write(d.join("vktr-0.1.149-alpha.1-macos-aarch64"), "alpha-149").unwrap();
+    std::fs::write(d.join("vktr-0.1.149-macos-aarch64"), "stable-149").unwrap();
     // Current is a stable release.
-    std::fs::write(d.join("grok-0.1.150-macos-aarch64"), "current").unwrap();
+    std::fs::write(d.join("vktr-0.1.150-macos-aarch64"), "current").unwrap();
 
     make_all_stale(d);
 
     cleanup_old_downloads(d, "vktr", "0.1.150").await;
 
     // Current must survive.
-    assert!(d.join("grok-0.1.150-macos-aarch64").exists(), "current");
+    assert!(d.join("vktr-0.1.150-macos-aarch64").exists(), "current");
     // Newest old is 0.1.149 stable (semver: 0.1.149 > 0.1.149-alpha.1).
     assert!(
-        d.join("grok-0.1.149-macos-aarch64").exists(),
+        d.join("vktr-0.1.149-macos-aarch64").exists(),
         "N-1 is stable 0.1.149"
     );
     // The rest should be deleted.
     assert!(
-        !d.join("grok-0.1.149-alpha.1-macos-aarch64").exists(),
+        !d.join("vktr-0.1.149-alpha.1-macos-aarch64").exists(),
         "alpha 0.1.149-alpha.1 deleted"
     );
     assert!(
-        !d.join("grok-0.1.148-macos-aarch64").exists(),
+        !d.join("vktr-0.1.148-macos-aarch64").exists(),
         "stable 0.1.148 deleted"
     );
 }
@@ -1459,32 +1459,32 @@ fn test_corrected_arch() {
 async fn test_cleanup_old_downloads_invalid_current_version_is_no_op() {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
-    std::fs::write(d.join("grok-0.1.140-macos-aarch64"), "v140").unwrap();
-    std::fs::write(d.join("grok-0.1.141-macos-aarch64"), "v141").unwrap();
+    std::fs::write(d.join("vktr-0.1.140-macos-aarch64"), "v140").unwrap();
+    std::fs::write(d.join("vktr-0.1.141-macos-aarch64"), "v141").unwrap();
 
     // An invalid version string makes cleanup early-return without deleting
     make_all_stale(d);
 
     cleanup_old_downloads(d, "vktr", "not-a-version").await;
-    assert!(d.join("grok-0.1.140-macos-aarch64").exists());
-    assert!(d.join("grok-0.1.141-macos-aarch64").exists());
+    assert!(d.join("vktr-0.1.140-macos-aarch64").exists());
+    assert!(d.join("vktr-0.1.141-macos-aarch64").exists());
 }
 #[tokio::test]
 async fn test_cleanup_old_downloads_files_with_non_digit_suffix_skipped() {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
-    // Files matching prefix but with a non-digit-leading suffix must be ignored (e.g. grok-latest, grok-pager-* when prefix is vktr).
-    std::fs::write(d.join("grok-latest"), "alias").unwrap();
+    // Files matching prefix but with a non-digit-leading suffix must be ignored (e.g. vktr-latest, grok-pager-* when prefix is vktr).
+    std::fs::write(d.join("vktr-latest"), "alias").unwrap();
     std::fs::write(d.join("grok-pager-0.1.141-macos-aarch64"), "pager").unwrap();
-    std::fs::write(d.join("grok-0.1.140-macos-aarch64"), "v140").unwrap();
-    std::fs::write(d.join("grok-0.1.141-macos-aarch64"), "current").unwrap();
+    std::fs::write(d.join("vktr-0.1.140-macos-aarch64"), "v140").unwrap();
+    std::fs::write(d.join("vktr-0.1.141-macos-aarch64"), "current").unwrap();
 
     make_all_stale(d);
 
     cleanup_old_downloads(d, "vktr", "0.1.141").await;
 
-    // grok-latest and grok-pager-* must be untouched.
-    assert!(d.join("grok-latest").exists());
+    // vktr-latest and grok-pager-* must be untouched.
+    assert!(d.join("vktr-latest").exists());
     assert!(d.join("grok-pager-0.1.141-macos-aarch64").exists());
 }
 
@@ -1493,47 +1493,47 @@ async fn test_cleanup_old_downloads_unparseable_version_skipped() {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
     // Files with the prefix and a leading digit but unparseable as semver are ignored (not deleted, not counted)
-    std::fs::write(d.join("grok-9garbage-macos-aarch64"), "junk").unwrap();
-    std::fs::write(d.join("grok-0.1.141-macos-aarch64"), "current").unwrap();
+    std::fs::write(d.join("vktr-9garbage-macos-aarch64"), "junk").unwrap();
+    std::fs::write(d.join("vktr-0.1.141-macos-aarch64"), "current").unwrap();
 
     make_all_stale(d);
 
     cleanup_old_downloads(d, "vktr", "0.1.141").await;
 
     assert!(
-        d.join("grok-9garbage-macos-aarch64").exists(),
+        d.join("vktr-9garbage-macos-aarch64").exists(),
         "unparseable file must be ignored, not deleted"
     );
-    assert!(d.join("grok-0.1.141-macos-aarch64").exists());
+    assert!(d.join("vktr-0.1.141-macos-aarch64").exists());
 }
 
 #[tokio::test]
 async fn test_cleanup_old_downloads_only_current_present_no_op() {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
-    std::fs::write(d.join("grok-0.1.141-macos-aarch64"), "current").unwrap();
+    std::fs::write(d.join("vktr-0.1.141-macos-aarch64"), "current").unwrap();
 
     make_all_stale(d);
 
     cleanup_old_downloads(d, "vktr", "0.1.141").await;
 
-    assert!(d.join("grok-0.1.141-macos-aarch64").exists());
+    assert!(d.join("vktr-0.1.141-macos-aarch64").exists());
 }
 
 #[tokio::test]
 async fn test_cleanup_old_downloads_only_one_old_keeps_it() {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
-    std::fs::write(d.join("grok-0.1.140-macos-aarch64"), "v140").unwrap();
-    std::fs::write(d.join("grok-0.1.141-macos-aarch64"), "current").unwrap();
+    std::fs::write(d.join("vktr-0.1.140-macos-aarch64"), "v140").unwrap();
+    std::fs::write(d.join("vktr-0.1.141-macos-aarch64"), "current").unwrap();
 
     make_all_stale(d);
 
     cleanup_old_downloads(d, "vktr", "0.1.141").await;
 
     // Only one old version, so it is kept as N-1
-    assert!(d.join("grok-0.1.140-macos-aarch64").exists(), "N-1 kept");
-    assert!(d.join("grok-0.1.141-macos-aarch64").exists(), "current");
+    assert!(d.join("vktr-0.1.140-macos-aarch64").exists(), "N-1 kept");
+    assert!(d.join("vktr-0.1.141-macos-aarch64").exists(), "current");
 }
 
 #[tokio::test]
@@ -1544,8 +1544,8 @@ async fn test_cleanup_old_downloads_unrelated_files_untouched() {
     std::fs::write(d.join("README.md"), "readme").unwrap();
     std::fs::write(d.join("config.toml"), "config").unwrap();
     std::fs::write(d.join("other-tool-0.1.0"), "other").unwrap();
-    std::fs::write(d.join("grok-0.1.140-macos-aarch64"), "v140").unwrap();
-    std::fs::write(d.join("grok-0.1.141-macos-aarch64"), "current").unwrap();
+    std::fs::write(d.join("vktr-0.1.140-macos-aarch64"), "v140").unwrap();
+    std::fs::write(d.join("vktr-0.1.141-macos-aarch64"), "current").unwrap();
 
     make_all_stale(d);
 
@@ -1562,21 +1562,21 @@ async fn test_cleanup_old_downloads_multiplatform_in_same_dir() {
     let d = dir.path();
     // Same version, multiple platforms (uncommon, but possible).
     // Both should be considered "current" via the version equality check.
-    std::fs::write(d.join("grok-0.1.141-macos-aarch64"), "mac").unwrap();
-    std::fs::write(d.join("grok-0.1.141-linux-x86_64"), "linux").unwrap();
-    std::fs::write(d.join("grok-0.1.140-macos-aarch64"), "old-mac").unwrap();
-    std::fs::write(d.join("grok-0.1.139-macos-aarch64"), "older-mac").unwrap();
+    std::fs::write(d.join("vktr-0.1.141-macos-aarch64"), "mac").unwrap();
+    std::fs::write(d.join("vktr-0.1.141-linux-x86_64"), "linux").unwrap();
+    std::fs::write(d.join("vktr-0.1.140-macos-aarch64"), "old-mac").unwrap();
+    std::fs::write(d.join("vktr-0.1.139-macos-aarch64"), "older-mac").unwrap();
 
     make_all_stale(d);
 
     cleanup_old_downloads(d, "vktr", "0.1.141").await;
 
     // Both platform variants of current must survive.
-    assert!(d.join("grok-0.1.141-macos-aarch64").exists());
-    assert!(d.join("grok-0.1.141-linux-x86_64").exists());
+    assert!(d.join("vktr-0.1.141-macos-aarch64").exists());
+    assert!(d.join("vktr-0.1.141-linux-x86_64").exists());
     // N-1 (0.1.140) kept, older deleted.
-    assert!(d.join("grok-0.1.140-macos-aarch64").exists());
-    assert!(!d.join("grok-0.1.139-macos-aarch64").exists());
+    assert!(d.join("vktr-0.1.140-macos-aarch64").exists());
+    assert!(!d.join("vktr-0.1.139-macos-aarch64").exists());
 }
 
 #[tokio::test]
@@ -1584,37 +1584,37 @@ async fn test_cleanup_old_downloads_tmp_files_deleted_even_when_unparseable() {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
     // Stale tmp files are deleted regardless of version-parseability.
-    std::fs::write(d.join("grok-junk.tmp"), "partial").unwrap();
-    make_stale(&d.join("grok-junk.tmp"));
-    std::fs::write(d.join("grok-0.1.140-macos-aarch64.tmp"), "partial2").unwrap();
-    make_stale(&d.join("grok-0.1.140-macos-aarch64.tmp"));
-    std::fs::write(d.join("grok-0.1.141-macos-aarch64"), "current").unwrap();
+    std::fs::write(d.join("vktr-junk.tmp"), "partial").unwrap();
+    make_stale(&d.join("vktr-junk.tmp"));
+    std::fs::write(d.join("vktr-0.1.140-macos-aarch64.tmp"), "partial2").unwrap();
+    make_stale(&d.join("vktr-0.1.140-macos-aarch64.tmp"));
+    std::fs::write(d.join("vktr-0.1.141-macos-aarch64"), "current").unwrap();
 
     make_all_stale(d);
 
     cleanup_old_downloads(d, "vktr", "0.1.141").await;
 
-    assert!(!d.join("grok-junk.tmp").exists(), "junk tmp deleted");
+    assert!(!d.join("vktr-junk.tmp").exists(), "junk tmp deleted");
     assert!(
-        !d.join("grok-0.1.140-macos-aarch64.tmp").exists(),
+        !d.join("vktr-0.1.140-macos-aarch64.tmp").exists(),
         "versioned tmp deleted"
     );
-    assert!(d.join("grok-0.1.141-macos-aarch64").exists());
+    assert!(d.join("vktr-0.1.141-macos-aarch64").exists());
 }
 #[tokio::test]
 async fn test_cleanup_old_downloads_darwin_platform_recognized() {
     // The `darwin` alias for macOS is in PLATFORM_OS; versions on grok-X.Y.Z-darwin-* layouts must split correctly
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
-    std::fs::write(d.join("grok-0.1.140-darwin-arm64"), "v140").unwrap();
-    std::fs::write(d.join("grok-0.1.141-darwin-arm64"), "current").unwrap();
+    std::fs::write(d.join("vktr-0.1.140-darwin-arm64"), "v140").unwrap();
+    std::fs::write(d.join("vktr-0.1.141-darwin-arm64"), "current").unwrap();
 
     make_all_stale(d);
 
     cleanup_old_downloads(d, "vktr", "0.1.141").await;
 
-    assert!(d.join("grok-0.1.141-darwin-arm64").exists(), "current");
-    assert!(d.join("grok-0.1.140-darwin-arm64").exists(), "N-1");
+    assert!(d.join("vktr-0.1.141-darwin-arm64").exists(), "current");
+    assert!(d.join("vktr-0.1.140-darwin-arm64").exists(), "N-1");
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -2312,14 +2312,14 @@ async fn download_and_decode_round_trips_each_codec() {
     for (suffix, codec, body) in [("zst", Codec::Zstd, zst), ("gz", Codec::Gzip, gz)] {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path(format!("/grok-1.2.3-linux-x86_64.{suffix}")))
+            .and(path(format!("/vktr-1.2.3-linux-x86_64.{suffix}")))
             .respond_with(ResponseTemplate::new(200).set_body_bytes(body))
             .mount(&server)
             .await;
 
         let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join("grok-1.2.3-linux-x86_64");
-        let url = format!("{}/grok-1.2.3-linux-x86_64.{suffix}", server.uri());
+        let dest = dir.path().join("vktr-1.2.3-linux-x86_64");
+        let url = format!("{}/vktr-1.2.3-linux-x86_64.{suffix}", server.uri());
         download_and_decode(&url, &dest, codec, false)
             .await
             .unwrap_or_else(|e| panic!("decode .{suffix}: {e}"));
@@ -2340,14 +2340,14 @@ async fn download_and_decode_errs_on_corrupt() {
 
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/grok-1.2.3-linux-x86_64.zst"))
+        .and(path("/vktr-1.2.3-linux-x86_64.zst"))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(b"not a zstd frame".to_vec()))
         .mount(&server)
         .await;
 
     let dir = tempfile::tempdir().unwrap();
-    let dest = dir.path().join("grok-1.2.3-linux-x86_64");
-    let url = format!("{}/grok-1.2.3-linux-x86_64.zst", server.uri());
+    let dest = dir.path().join("vktr-1.2.3-linux-x86_64");
+    let url = format!("{}/vktr-1.2.3-linux-x86_64.zst", server.uri());
     let result = download_and_decode(&url, &dest, Codec::Zstd, false).await;
 
     assert!(
@@ -2368,14 +2368,14 @@ async fn download_cli_artifact_falls_back_to_plain() {
     let payload = b"\x7fELF vktr binary payload".to_vec();
     let server = MockServer::start().await; // only the plain object exists; .zst/.gz 404
     Mock::given(method("GET"))
-        .and(path("/grok-1.2.3-linux-x86_64"))
+        .and(path("/vktr-1.2.3-linux-x86_64"))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(payload.clone()))
         .mount(&server)
         .await;
 
     let dir = tempfile::tempdir().unwrap();
-    let dest = dir.path().join("grok-1.2.3-linux-x86_64");
-    download_cli_artifact_from_gcs(&server.uri(), "grok-1.2.3-linux-x86_64", &dest, false)
+    let dest = dir.path().join("vktr-1.2.3-linux-x86_64");
+    download_cli_artifact_from_gcs(&server.uri(), "vktr-1.2.3-linux-x86_64", &dest, false)
         .await
         .expect("fall back to the plain binary when compressed forms are absent");
 
@@ -2392,19 +2392,19 @@ async fn download_cli_artifact_prefers_compressed_over_plain() {
     let zst = zstd::encode_all(payload.as_slice(), 3).unwrap();
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/grok-1.2.3-linux-x86_64.zst"))
+        .and(path("/vktr-1.2.3-linux-x86_64.zst"))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(zst))
         .mount(&server)
         .await;
     Mock::given(method("GET"))
-        .and(path("/grok-1.2.3-linux-x86_64"))
+        .and(path("/vktr-1.2.3-linux-x86_64"))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(b"PLAIN sentinel".to_vec()))
         .mount(&server)
         .await;
 
     let dir = tempfile::tempdir().unwrap();
-    let dest = dir.path().join("grok-1.2.3-linux-x86_64");
-    download_cli_artifact_from_gcs(&server.uri(), "grok-1.2.3-linux-x86_64", &dest, false)
+    let dest = dir.path().join("vktr-1.2.3-linux-x86_64");
+    download_cli_artifact_from_gcs(&server.uri(), "vktr-1.2.3-linux-x86_64", &dest, false)
         .await
         .expect("prefer the compressed sidecar when present");
 
@@ -2419,12 +2419,12 @@ async fn download_cli_artifact_prefers_compressed_over_plain() {
 #[test]
 fn cli_object_candidates_try_windows_exe_first() {
     assert_eq!(
-        cli_object_candidates("grok-1.2.3-windows-x86_64", true),
-        ["grok-1.2.3-windows-x86_64.exe", "grok-1.2.3-windows-x86_64"]
+        cli_object_candidates("vktr-1.2.3-windows-x86_64", true),
+        ["vktr-1.2.3-windows-x86_64.exe", "vktr-1.2.3-windows-x86_64"]
     );
     assert_eq!(
-        cli_object_candidates("grok-1.2.3-linux-x86_64", false),
-        ["grok-1.2.3-linux-x86_64"]
+        cli_object_candidates("vktr-1.2.3-linux-x86_64", false),
+        ["vktr-1.2.3-linux-x86_64"]
     );
 }
 

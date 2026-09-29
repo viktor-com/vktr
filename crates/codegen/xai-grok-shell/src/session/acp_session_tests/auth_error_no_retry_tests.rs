@@ -928,18 +928,18 @@ async fn legacy_auth_hint_on_404_model_not_found() {
                 "404 with WebLogin must include deprecation message, got: {msg}"
             );
             assert!(
-                msg.contains("grok update"),
-                "hint must mention `grok update` before re-login, got: {msg}"
+                msg.contains("vktr update"),
+                "hint must mention `vktr update` before re-login, got: {msg}"
             );
             assert!(
-                msg.contains("grok logout"),
-                "hint must mention `grok logout`, got: {msg}"
+                msg.contains("vktr logout"),
+                "hint must mention `vktr logout`, got: {msg}"
             );
             assert!(
-                msg.contains("grok login"),
-                "hint must mention `grok login`, got: {msg}"
+                msg.contains("vktr login"),
+                "hint must mention `vktr login`, got: {msg}"
             );
-            let update_at = msg.find("grok update").expect("grok update");
+            let update_at = msg.find("vktr update").expect("vktr update");
             let logout_at = msg.find("vktr logout").expect("vktr logout");
             assert!(
                 update_at < logout_at,

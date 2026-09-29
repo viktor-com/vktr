@@ -2179,6 +2179,10 @@ fn cleanup_queue_dir(queue_dir: &Path, max_age: Duration, stats: Option<&UploadQ
     let all_names: HashSet<std::ffi::OsString> = entries.iter().map(|e| e.file_name()).collect();
     let mut cleaned = 0u64;
     let mut cleaned_bytes = 0u64;
+    // Judge every entry before removing any: a temp file's age comes from its sidecar, and
+    // read_dir order is filesystem-dependent, so deleting the sidecar first would make the
+    // temp file fall back to its (fresh) mtime and survive.
+    let mut expired = Vec::new();
     for entry in &entries {
         let Ok(metadata) = entry.metadata() else {
             continue;
@@ -2202,6 +2206,9 @@ fn cleanup_queue_dir(queue_dir: &Path, max_age: Duration, stats: Option<&UploadQ
         if age <= max_age {
             continue;
         }
+        expired.push((path, name, metadata));
+    }
+    for (path, name, metadata) in expired {
         if metadata.is_dir() {
             let size = dir_size(&path).unwrap_or(0);
             if std::fs::remove_dir_all(&path).is_ok() {

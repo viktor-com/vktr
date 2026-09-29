@@ -175,10 +175,17 @@ pub(crate) fn format_request_failure(
     let wire = refine_untyped_wire(wire, untyped, status, raw);
     let extracted = extract_error_detail(raw);
     let class = classify(status, wire);
-    let why = extracted
-        .filter(|d| !is_server_fault(status, wire) && !is_headline_echo(d, &class.headline))
-        .or_else(|| class.default_why.map(str::to_string));
-    let detail = compose_detail(why.as_deref(), class.action);
+    // vktr: Viktor reports a failed agent run as a 5xx (or a failed stream) whose body is the run's own
+    // error text, so the server's detail is always shown. The generic "service is busy" advice only fills
+    // in when the body said nothing, because telling the user to resend a failed run is misleading.
+    let server_why = extracted.filter(|d| !is_headline_echo(d, &class.headline));
+    let action = if server_why.is_some() && is_server_fault(status, wire) {
+        None
+    } else {
+        class.action
+    };
+    let why = server_why.or_else(|| class.default_why.map(str::to_string));
+    let detail = compose_detail(why.as_deref(), action);
     FormattedRequestFailure {
         status,
         headline: class.headline,
@@ -659,15 +666,9 @@ mod tests {
         );
         assert_eq!(formatted.status, Some(500));
         assert_eq!(formatted.headline, "Server error (500)");
-        assert_eq!(
-            formatted.detail,
-            "Something went wrong on our side. Wait a minute and send again."
-        );
-        assert_eq!(
-            formatted.message(),
-            "Server error (500): Something went wrong on our side. Wait a minute and send again."
-        );
-        assert!(!formatted.message().contains("exploded"));
+        // vktr surfaces the server's own text for a 500, never a generic apology.
+        assert_eq!(formatted.detail, "upstream exploded");
+        assert_eq!(formatted.message(), "Server error (500): upstream exploded");
     }
 
     /// A parsed provider reason on a 4xx survives the banner formatting end-to-end.

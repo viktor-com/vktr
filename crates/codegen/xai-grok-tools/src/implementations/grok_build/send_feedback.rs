@@ -131,7 +131,7 @@ ${%- if tools.by_kind.ask_user %}\n\
 If mapping feedback is incredibly unclear, only then may you use ${{ tools.by_kind.ask_user }} to confirm ambiguity with the user. Use this sparingly.\n\
 ${%- endif %}\n\n\
 # Confirmation\n\n\
-After drafting feedback and ending your turn, tell the user the draft is saved locally for this session. In the Grok CLI they review and send it by typing `/feedback` and opening the Drafts tab; from any other client, have them resume this session in the Grok CLI first.\n\n\
+After drafting feedback and ending your turn, tell the user the draft is saved locally for this session. In vktr they review and send it by typing `/feedback` and opening the Drafts tab; from any other client, have them resume this session in the Grok CLI first.\n\n\
 # Misc\n\n\
 ${%- if feedback_drafts_path %}\n\
 This session's drafts file is ${{ feedback_drafts_path }}.\n\

@@ -300,4 +300,4 @@ This is not a full mirrored RTL UI.
 
 ## Still Stuck?
 
-Run `/feedback` to report it.
+Note it with `/feedback` (kept in the session's `feedback.jsonl` on your machine; vktr has no feedback service). `vktr doctor` shows terminal, clipboard, color and input findings.

@@ -6,7 +6,9 @@ vktr connects to custom model endpoints for alternative providers, self-hosted m
 
 ## Default Models
 
-By default, vktr uses models hosted by SpaceXAI, and new sessions start with `grok-4.5`. Default models require no configuration. Authenticate with `vktr login` or an API key, then start a session.
+vktr has one built-in model, `viktor`: the Viktor agent, reached through the Viktor compat API on the `responses` protocol. New sessions start with it. It needs no configuration beyond a Viktor API key (`vktr login` or `VIKTOR_API_KEY`; see [Authentication](02-authentication.md)).
+
+Any OpenAI-compatible backend (Ollama, llama.cpp, vLLM, a gateway) can be added as a custom model, described below.
 
 List all available models:
 
@@ -21,7 +23,7 @@ vktr models
 ### CLI Flag
 
 ```bash
-vktr -p "Hello" -m grok-4.6
+vktr -p "Hello" -m viktor
 ```
 
 ### Slash Command
@@ -29,13 +31,13 @@ vktr -p "Hello" -m grok-4.6
 In the TUI, switch models during a session:
 
 ```
-/model grok-4.6
+/model viktor
 ```
 
 Or use the alias:
 
 ```
-/m grok-4.6
+/m local
 ```
 
 ### Model Picker (Ctrl+M)
@@ -48,8 +50,8 @@ Enterprise hosts can pin the **selectable** set — not only the default — in 
 
 ```toml
 [models]
-default = "grok-4.5"
-allowed_models = ["grok-4.5", "grok-4*"]
+default = "viktor"
+allowed_models = ["viktor", "local*"]
 ```
 
 A fleet pin matches the **model id** (not a user-chosen catalog key), so a local `[model.<name>]` entry cannot widen the set. User-config `allowed_models` still matches catalog key or model id. Omit the key to leave user config standing. An empty array is unrestricted. A present-but-unreadable pin fail-closes (nothing selectable). A default or `-m` value outside the pinned set is rejected once the model catalog is fetched — contact your administrator; the list is not user-editable.
@@ -60,7 +62,7 @@ Set a persistent default in `~/.vktr/config.toml`:
 
 ```toml
 [models]
-default = "grok-4.5"
+default = "local"      # a [model.<name>] key, or "viktor"
 ```
 
 ---
@@ -75,7 +77,7 @@ vktr supports three API backends. Set `api_backend` in your `[model.*]` config t
 | `"responses"` | OpenAI Responses (`/v1/responses`) | |
 | `"messages"` | Anthropic Messages (`/v1/messages`) | |
 
-When you omit `api_backend`, vktr uses `chat_completions`.
+When you omit `api_backend` on a custom model, vktr uses `chat_completions`. The built-in `viktor` model uses `responses`; switch it with `VIKTOR_API_BACKEND` or `[model.viktor] api_backend` (see [Configuration](05-configuration.md#viktor-endpoint-and-protocol)).
 
 To send provider-specific authentication or version headers -- for example, Anthropic's `x-api-key` -- use the `extra_headers` field described below. vktr sends those headers verbatim with every request to the endpoint.
 
@@ -92,7 +94,7 @@ base_url = "https://api.example.com/v1"   # OpenAI-compatible endpoint
 name = "Display Name"                     # Shown in the model picker
 description = "Model description"          # Optional description
 api_key = "sk-..."                        # API key for this provider (optional)
-env_key = "XAI_API_KEY"                   # Env var holding the API key (optional; string or array)
+env_key = "OPENAI_API_KEY"                # Env var holding the API key (optional; string or array)
 api_backend = "chat_completions"          # "chat_completions", "responses", or "messages"
 reasoning_summary = "concise"             # Responses API only: "none", "auto", "concise", or "detailed"
 temperature = 0.7                         # Sampling temperature
@@ -110,8 +112,9 @@ vktr resolves the API key in this order:
 
 1. The `api_key` field in the model config
 2. The environment variable(s) named by `env_key` — a single string or an array of names. The first set, non-empty value wins (for example `env_key = ["ANTHROPIC_AUTH_TOKEN", "LC_ANTHROPIC_AUTH_TOKEN"]` for SSH `LC_*` forwarding)
-3. Your signed-in session token (from `vktr login`), for a model with no `api_key`/`env_key` of its own
-4. The `XAI_API_KEY` environment variable (global fallback; vktr also accepts `VKTR_CODE_XAI_API_KEY` for backward compatibility)
+3. The `VIKTOR_API_KEY` environment variable (global fallback; `XAI_API_KEY` is accepted as a legacy name)
+
+A model pointed at a local backend usually needs a key only if the backend checks one. Give such a model its own `api_key` or `env_key`, so your Viktor key is not sent to it.
 
 ### Context Window
 
@@ -187,14 +190,13 @@ Both fields also work on a shared `[model_providers.<id>]` block. A model that p
 You can override specific fields of built-in models without redefining everything. Only specify the fields you want to change:
 
 ```toml
-# Override only the API key for a default model
-[model.grok-4.6]
-api_key = "my-api-key"
+# The Viktor key saved by `vktr login`
+[model.viktor]
+api_key = "zt_live_sk_..."
 
-# Override temperature and add a custom API key
-[model.grok-4.6]
-temperature = 0.5
-api_key = "sk-custom"
+# Use Viktor over chat completions instead of responses
+[model.viktor]
+api_backend = "chat_completions"
 ```
 
 When you override a built-in model, vktr starts with the default configuration (including the correct `base_url`), then applies only the fields you specify. Unspecified fields inherit from the default.
@@ -202,8 +204,8 @@ When you override a built-in model, vktr starts with the default configuration (
 ### Priority Order
 
 1. Your config (`[model.*]`) -- highest priority
-2. Prefetched models from remote `/v1/models`
-3. Hardcoded defaults -- lowest priority
+2. The built-in catalog (`viktor`)
+3. Models listed by a remote `/v1/models` -- these add models but never replace a built-in entry
 
 ---
 
@@ -261,14 +263,13 @@ Bedrock's OpenAI-compatible gateway rejects `reasoning.summary`, so set `reasoni
 command = "aws-bedrock-token"   # prints a Bedrock API key on stdout (e.g. via aws-bedrock-token-generator)
 token_ttl_secs = 3600
 
-[model."bedrock-grok-4.6"]
-model = "xai.grok-4.6"
+[model."bedrock-model"]
+model = "<bedrock model id>"
 base_url = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
-name = "Grok 4.6 (Bedrock)"
+name = "Bedrock model"
 api_backend = "responses"
 reasoning_summary = "none"
 auth_provider = "bedrock"
-context_window = 500000
 ```
 
 ### Ollama (Local Models)
@@ -310,21 +311,21 @@ temperature = 0.8
 
 ## Custom Models Endpoint
 
-Point vktr at a custom OpenAI-compatible `/v1/models` endpoint instead of the default. Use this when your models sit behind a corporate gateway or a self-hosted inference service.
+Point vktr at a custom OpenAI-compatible `/v1/models` endpoint. Use this when your models sit behind a corporate gateway or a self-hosted inference service. In this mode the remote model list stands alone: it replaces the built-in catalog.
 
 ### Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `VKTR_MODELS_BASE_URL` | Yes | Base URL for inference. vktr fetches the model list from `{base_url}/models`. |
-| `XAI_API_KEY` | Yes | API key sent as `Authorization: Bearer`. vktr also accepts `VKTR_CODE_XAI_API_KEY`. |
+| `VIKTOR_API_KEY` | Yes | API key sent as `Authorization: Bearer` (the global key variable; `XAI_API_KEY` is accepted as a legacy name). |
 | `VKTR_MODELS_LIST_URL` | No | Override the model-list URL when it differs from `{base_url}/models`. |
 
 ### Setup
 
 ```bash
 export VKTR_MODELS_BASE_URL="https://api.acme.com/v1"
-export XAI_API_KEY="xai-..."
+export VIKTOR_API_KEY="<gateway key>"
 vktr
 ```
 
@@ -334,8 +335,8 @@ vktr
 [endpoints]
 models_base_url = "https://api.acme.com/v1"
 
-# Override only the API key for a specific model
-[model.grok-4.6]
+# Override only the API key for a specific model the gateway lists
+[model.my-gateway-model]
 api_key = "my-api-key"
 ```
 
@@ -343,35 +344,13 @@ When you use `[endpoints]` with partial model overrides, vktr inherits the `base
 
 ### Auth Behavior
 
-When you set `models_base_url`, vktr uses API key auth (`Authorization: Bearer`) instead of session auth. You do not need `vktr login` -- the API key is enough.
+When you set `models_base_url`, vktr sends the API key as `Authorization: Bearer`.
 
 ---
 
 ## Web Search Model
 
-The `web_search` tool uses a separate model. Configure it with:
-
-```toml
-[models]
-web_search = "grok-4.5"
-```
-
-Or via environment variable:
-
-```bash
-export VKTR_WEB_SEARCH_MODEL="grok-4.5"
-```
-
-If you point web search at a custom model, you also need a `[model.*]` entry so vktr can reach it. Server-side ("backend") web search runs only when the model sets `supports_backend_search = true` (and the build enables backend search); it does not depend on `api_backend`:
-
-```toml
-[models]
-web_search = "my-custom-model"
-
-[model.my-custom-model]
-model = "my-custom-model"
-supports_backend_search = true
-```
+The `web_search` tool only works against xAI's backend, so vktr does not offer it unless `VKTR_XAI_BACKED_TOOLS=1`, and even then it does not work against Viktor. Use `web_fetch` for fetching pages.
 
 ---
 
@@ -394,37 +373,31 @@ default = "my-model"
 
 ---
 
-## Enterprise Deployment
+## Team Setup
 
-A complete config for an enterprise deployment with custom models:
+Viktor as the default, with a local model for quick questions:
 
 ```toml
-[cli]
-auto_update = false
-
-[auth]
-auth_provider_command = "/usr/local/bin/my-company-auth-provider"
-auth_provider_label = "Acme Corp"
-auth_token_ttl = 3600
-
 [models]
-default = "company-grok"
+default = "viktor"
 
-[model.company-grok]
-model = "grok-4.6"
-base_url = "https://grok-proxy.acme.com/"
-name = "Grok 4.6 (Proxy)"
-context_window = 128000
-
-[features]
-telemetry = false
+[model.local]
+model = "qwen3.5:4b"
+base_url = "http://localhost:11434/v1"
+name = "Local Qwen"
+env_key = "OPENAI_API_KEY"
+context_window = 32000
 ```
+
+`vktr launch vktr` can also point vktr at a running local backend without editing `config.toml`; see [Agent Mode](15-agent-mode.md#vktr-launch).
 
 ---
 
 ## Troubleshooting
 
 ### Model Not Found
+
+For Viktor itself, `vktr doctor` checks the key, the endpoint, and the connection.
 
 ```bash
 # List available models
@@ -439,14 +412,14 @@ Verify the endpoint is reachable:
 
 ```bash
 curl -s https://api.example.com/v1/models \
-  -H "Authorization: Bearer $XAI_API_KEY"
+  -H "Authorization: Bearer $OPENAI_API_KEY"
 ```
 
 ### Debug Logging
 
 ```bash
-RUST_LOG=debug VKTR_LOG_FILE=/tmp/grok.log vktr
-tail -f /tmp/grok.log
+RUST_LOG=debug VKTR_LOG_FILE=/tmp/vktr.log vktr
+tail -f /tmp/vktr.log
 ```
 
 Look for log entries containing `model` or `sampling` to trace model selection and API calls.

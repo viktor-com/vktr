@@ -140,8 +140,8 @@ impl NextStep {
             Self::Retry => "Start vktr again.",
             Self::CheckNetworkThenRetry => "Check your network connection, then start vktr again.",
             Self::RestartSharedLeader => {
-                "Stop it with the command below, which also stops any other Grok \
-                 session using it, then start Grok again."
+                "Stop it with the command below, which also stops any other vktr \
+                 session using it, then start vktr again."
             }
         }
     }
@@ -149,7 +149,7 @@ impl NextStep {
     fn command(self) -> Option<&'static str> {
         match self {
             Self::Retry | Self::CheckNetworkThenRetry => Some(CONNECT_UI_TIMEOUT_TRY_COMMAND),
-            Self::RestartSharedLeader => Some("grok leader kill"),
+            Self::RestartSharedLeader => Some("vktr leader kill"),
         }
     }
 }

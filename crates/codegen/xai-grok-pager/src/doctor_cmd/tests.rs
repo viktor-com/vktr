@@ -347,7 +347,7 @@ fn human_wayland_error_includes_detail_once() {
     assert_eq!(
         human::format(&report),
         concat!(
-            "Grok Doctor\n",
+            "vktr Doctor\n",
             "\n",
             "Environment\n",
             "  · terminal                     Ghostty\n",

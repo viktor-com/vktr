@@ -194,17 +194,17 @@ impl fmt::Display for GrantRefuse {
             Self::NoHome => write!(
                 f,
                 "Couldn't save folder trust: no home directory for the trust store. \
-                 Set VKTR_HOME to an absolute directory (or unset it), then start Grok again."
+                 Set VKTR_HOME to an absolute directory (or unset it), then start vktr again."
             ),
             Self::Unreadable => write!(
                 f,
                 "Couldn't save folder trust: the trust store could not be read. \
-                 Fix or delete ~/.grok/trusted_folders.toml, then start Grok again and press y."
+                 Fix or delete ~/.vktr/trusted_folders.toml, then start vktr again and press y."
             ),
             Self::KeyMoved => write!(
                 f,
                 "Couldn't save folder trust: the folder path changed. \
-                 Start Grok again from the folder you want to trust."
+                 Start vktr again from the folder you want to trust."
             ),
         }
     }
@@ -245,7 +245,7 @@ impl fmt::Display for GrantOutcome {
                 ..
             } => write!(
                 f,
-                "Couldn't save folder trust. Check that ~/.grok is writable, \
+                "Couldn't save folder trust. Check that ~/.vktr is writable, \
                  then run `grok --trust` in this folder."
             ),
             Self::Refused { reason } => write!(f, "{reason}"),
@@ -656,7 +656,7 @@ pub fn prompt_for_trust(key: &Path) -> bool {
     let _ = writeln!(
         err,
         "This folder contains repo-local config (MCP/LSP servers, hooks, permission rules) \
-         or project instructions/skills that Grok would otherwise apply automatically."
+         or project instructions/skills that vktr would otherwise apply automatically."
     );
     let _ = writeln!(err, "  Folder: {}", key.display());
     let _ = write!(

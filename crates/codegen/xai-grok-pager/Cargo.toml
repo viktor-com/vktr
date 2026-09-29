@@ -1,11 +1,12 @@
 [package]
 name = "xai-grok-pager"
-version = "1.0.38"
+version = "1.0.38-vktr.2"
 edition.workspace = true
 license = "Apache-2.0"
 authors = ["xAI"]
 
 [dependencies]
+xai-grok-extra-ca = { workspace = true }
 # TTY safety — detach subprocesses from the controlling terminal
 dunce = { workspace = true }
 xai-tty-utils = { workspace = true }

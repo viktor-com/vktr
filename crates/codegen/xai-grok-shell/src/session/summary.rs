@@ -63,8 +63,17 @@ impl SummaryGenerator {
 
                 // A background task runs the LLM call so the persistence actor keeps processing messages (updates, flushes)
                 tokio::spawn(async move {
-                    let mut title =
-                        generate_session_summary(content.clone(), sampling_client, &model).await;
+                    // vktr: an LLM-written title costs a model call per session; against Viktor that is a
+                    // separate billed agent run and thread. Titles come from the user's first words unless
+                    // `VKTR_LLM_SESSION_TITLES=1` opts back in (useful with a cheap local model).
+                    let llm_titles =
+                        crate::agent::config::env_bool("VKTR_LLM_SESSION_TITLES") == Some(true);
+                    let mut title = if llm_titles {
+                        generate_session_summary(content.clone(), sampling_client, &model).await
+                    } else {
+                        let _ = (&sampling_client, &model);
+                        String::new()
+                    };
                     if title.trim().is_empty() {
                         title =
                             crate::session::helpers::session_summary::title_fallback_from_user_text(

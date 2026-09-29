@@ -1296,14 +1296,14 @@ impl AgentDefinition {
     }
     fn scope_from_path(path: &Path) -> AgentScope {
         let path_str = path.to_string_lossy();
-        let vktr = xai_grok_config::user_grok_home();
+        let grok = xai_grok_config::user_grok_home();
         let home = xai_dirs::home_dir();
         for (dir, scope) in crate::discovery::user_agent_dirs(home.as_deref(), grok.as_deref()) {
             if path.starts_with(&dir) {
                 return scope;
             }
         }
-        if path_str.contains(".grok/agents/") || path_str.contains(".grok\\agents\\") {
+        if path_str.contains(".vktr/agents/") || path_str.contains(".vktr\\agents\\") {
             return AgentScope::Project;
         }
         if path_str.contains(".vktr/bundled/agents/")

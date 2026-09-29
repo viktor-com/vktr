@@ -45,8 +45,12 @@ pub const DEFAULT_AGENT_TYPE: &str = "grok-build-plan";
 pub(crate) fn default_agent_type() -> String {
     DEFAULT_AGENT_TYPE.to_owned()
 }
-pub const CLI_CHAT_PROXY_BASE_URL_DEFAULT: &str = "https://cli-chat-proxy.grok.com/v1";
-pub const XAI_API_BASE_URL_DEFAULT: &str = "https://api.x.ai/v1";
+/// The Viktor compat API base URL (OpenAI-style `/v1` root). Override with `VIKTOR_BASE_URL`.
+pub const VIKTOR_BASE_URL_DEFAULT: &str = "https://api.viktor.com/api/compat/v1";
+/// vktr has no cli-chat-proxy; auxiliary lookups (`/models`, `/settings`) resolve against Viktor.
+pub const CLI_CHAT_PROXY_BASE_URL_DEFAULT: &str = VIKTOR_BASE_URL_DEFAULT;
+/// vktr has no first-party xAI API; the "first-party" endpoint is Viktor.
+pub const XAI_API_BASE_URL_DEFAULT: &str = VIKTOR_BASE_URL_DEFAULT;
 const NO_INLINE_CITATIONS_RESPONSE_INCLUDE: &str = "no_inline_citations";
 /// One or more environment variable names that may hold a model API key.
 /// Serde `untagged`: accepts a string or an array in TOML/JSON.
@@ -136,6 +140,9 @@ pub struct EndpointsConfig {
     pub cli_chat_proxy_base_url: Option<String>,
     /// Base URL for the public xAI API.
     pub xai_api_base_url: String,
+    /// Env: `VIKTOR_BASE_URL`. The Viktor compat API base URL used by the built-in `viktor` models.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub viktor_base_url: Option<String>,
     /// Optional extra access-header value (applied only with the optional non-production feature, and only for matching first-party hosts).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alpha_test_key: Option<String>,
@@ -280,6 +287,10 @@ impl EndpointsConfig {
         self.models_base_url
             .clone()
             .unwrap_or_else(|| self.proxy_url())
+    }
+    /// The Viktor compat API base URL: `[endpoints] viktor_base_url` / `VIKTOR_BASE_URL`, else the public default.
+    pub fn resolve_viktor_base_url(&self) -> String {
+        blank_as_unset(&self.viktor_base_url).unwrap_or_else(|| VIKTOR_BASE_URL_DEFAULT.to_owned())
     }
     /// Feedback endpoint, an auxiliary service, so it defaults to the cli-chat-proxy, never `xai_api_base_url`.
     pub(crate) fn resolve_feedback_base_url(&self) -> String {
@@ -487,9 +498,14 @@ impl EndpointsConfig {
 impl Default for EndpointsConfig {
     fn default() -> Self {
         Self {
-            cli_chat_proxy_base_url: std::env::var("VKTR_CLI_CHAT_PROXY_BASE_URL").ok(),
+            cli_chat_proxy_base_url: std::env::var("VKTR_CLI_CHAT_PROXY_BASE_URL")
+                .ok()
+                .or_else(|| env_string("VIKTOR_BASE_URL")),
             xai_api_base_url: std::env::var("VKTR_XAI_API_BASE_URL")
-                .unwrap_or_else(|_| XAI_API_BASE_URL_DEFAULT.to_owned()),
+                .ok()
+                .or_else(|| env_string("VIKTOR_BASE_URL"))
+                .unwrap_or_else(|| XAI_API_BASE_URL_DEFAULT.to_owned()),
+            viktor_base_url: env_string("VIKTOR_BASE_URL"),
             alpha_test_key: None,
             models_base_url: env_string("VKTR_MODELS_BASE_URL"),
             models_list_url: env_string("VKTR_MODELS_LIST_URL"),
@@ -803,6 +819,28 @@ pub(crate) fn resolve_string_flag(
 }
 /// Resolve `enabled` for section-based configs (memory, subagents, etc.).
 /// Feature flag only applies when the TOML section is absent.
+/// vktr keeps the tool list lean by default: every tool schema is resent on every request, and
+/// against Viktor the heavy upstream tools (workflows, subagents, scheduler, monitor, goal) cost
+/// about 8K input tokens per request and made replies slower and less predictable (measured
+/// 2026-09-23: 42K vs 34K input tokens; 7.8 s and 24.7 s vs 5.7 s and 4.3 s). Viktor also runs
+/// its own background work and subagents server-side. `VKTR_FULL_TOOLSET=1` restores upstream's
+/// defaults; `VKTR_WORKFLOWS=1`, `VKTR_SUBAGENTS=1` or their config sections enable one family.
+pub fn full_toolset() -> bool {
+    std::env::var("VKTR_FULL_TOOLSET")
+        .map(|v| matches!(v.trim(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+/// Tools the lean default leaves out of the main agent (see [`full_toolset`]). Workflows and
+/// subagents are turned off at their source instead, so their prompt listings go too.
+pub(crate) const LEAN_TOOLSET_DENY: &[&str] = &[
+    "scheduler_create",
+    "scheduler_delete",
+    "scheduler_list",
+    "monitor",
+    "update_goal",
+];
+
 pub(crate) fn resolve_enabled(
     cli_flag: Option<bool>,
     env_var: &str,
@@ -1486,6 +1524,17 @@ impl CliAgentOverrides {
         }
         if let Some(ref dt) = self.disallowed_tools {
             def.disallowed_tools = dt.clone();
+        }
+        if !full_toolset() {
+            for tool in LEAN_TOOLSET_DENY {
+                let asked_for = self
+                    .tools
+                    .as_ref()
+                    .is_some_and(|t| t.iter().any(|n| n == tool));
+                if !asked_for && !def.disallowed_tools.iter().any(|n| n == tool) {
+                    def.disallowed_tools.push((*tool).to_owned());
+                }
+            }
         }
         if let Some(ref pm) = self.permission_mode {
             def.permission_mode = pm.clone();
@@ -2643,7 +2692,7 @@ impl Config {
             .resolve()
     }
     /// Background workflows (`workflow` tool, `.vktr/workflows/*.rhai`, `/deep-research`, host-owned `/goal` driver).
-    /// Default ON: deployments that never receive remote settings still get workflows; `Some(false)` remote / config / env remains a kill-switch.
+    /// Default off in vktr (see [`full_toolset`]); `VKTR_WORKFLOWS=1` or `[workflows] enabled = true` turn them on, and `Some(false)` remote / config / env remains a kill-switch.
     pub(crate) fn resolve_workflows(&self) -> Resolved<bool> {
         let ff = self
             .remote_settings
@@ -2655,7 +2704,7 @@ impl Config {
         BoolFlag::env("VKTR_WORKFLOWS")
             .config(self.workflows.enabled)
             .feature_flag(ff)
-            .default(true)
+            .default(full_toolset())
             .resolve()
     }
     /// Classifier, planner, and summary all default to goal mode itself: when `/goal` is on they are on unless config/env/remote says otherwise.
@@ -3338,10 +3387,15 @@ pub(crate) fn resolve_model_list(
                 }
             }
             if resolved.contains_key(key) {
-                tracing::debug!(model_key = %key, "prefetched model overriding default");
+                tracing::debug!(model_key = %key, "prefetched model shadowed by built-in default");
             }
         }
-        resolved = prefetched;
+        // vktr: the built-in catalog is curated (credentials, retry cap, backend variants), so a remote
+        // `/v1/models` listing only adds models the catalog lacks; it never replaces a built-in entry.
+        // In custom-endpoint mode the defaults were skipped above, so the remote list stands alone.
+        for (key, entry) in prefetched {
+            resolved.entry(key).or_insert(entry);
+        }
     }
     let mut explicit_api_backend_keys = std::collections::HashSet::new();
     for (key, model_override) in &cfg.config_models {
@@ -3596,6 +3650,29 @@ struct DefaultModelJson {
     auto_compact_threshold_percent: Option<u8>,
     #[serde(default)]
     system_prompt_label: Option<String>,
+    /// Explicit provider base URL. When absent, `viktor`-family entries use the Viktor base URL
+    /// and every other entry uses the inference base URL.
+    #[serde(default)]
+    base_url: Option<String>,
+    /// Environment variable name(s) holding the provider API key; the first set, non-empty one wins.
+    #[serde(default)]
+    env_key: Option<Vec<String>>,
+    /// Per-model retry cap (see `ModelEntryConfig::max_retries`).
+    #[serde(default)]
+    max_retries: Option<u32>,
+}
+/// Parse `VIKTOR_API_BACKEND`; unknown values are ignored with a warning so a typo cannot break startup.
+fn viktor_api_backend_from_env() -> Option<ApiBackend> {
+    let raw = env_string("VIKTOR_API_BACKEND")?;
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "responses" => Some(ApiBackend::Responses),
+        "chat_completions" | "chat-completions" | "chat" => Some(ApiBackend::ChatCompletions),
+        "messages" | "anthropic" => Some(ApiBackend::Messages),
+        other => {
+            tracing::warn!(value = %other, "VIKTOR_API_BACKEND is not one of responses|chat_completions|messages; ignored");
+            None
+        }
+    }
 }
 fn default_models(endpoints: &EndpointsConfig) -> IndexMap<String, ModelEntryConfig> {
     let root: serde_json::Value = serde_json::from_str(crate::models::DEFAULT_MODELS_JSON)
@@ -3622,12 +3699,33 @@ fn default_models(endpoints: &EndpointsConfig) -> IndexMap<String, ModelEntryCon
             let context_window = m
                 .context_window
                 .unwrap_or_else(|| NonZeroU64::new(200_000).expect("200000 is non-zero"));
+            let is_viktor = m.model_family.as_deref() == Some("viktor");
+            let base_url = m.base_url.clone().unwrap_or_else(|| {
+                if is_viktor {
+                    endpoints.resolve_viktor_base_url()
+                } else {
+                    endpoints.resolve_inference_base_url()
+                }
+            });
+            let api_base_url = if is_viktor {
+                base_url.clone()
+            } else {
+                endpoints.xai_api_base_url.clone()
+            };
+            let env_key = m.env_key.clone().map(EnvKeys::new);
+            // `VIKTOR_API_BACKEND` picks the wire protocol for the built-in Viktor model:
+            // `responses` (default, server-side continuation), `chat_completions`, or `messages`.
+            let api_backend = if is_viktor {
+                viktor_api_backend_from_env().unwrap_or(m.api_backend)
+            } else {
+                m.api_backend
+            };
             let config = ModelEntryConfig {
                 id: m.id,
                 model: m.model,
                 model_family: m.model_family,
-                base_url: endpoints.resolve_inference_base_url(),
-                api_base_url: Some(endpoints.xai_api_base_url.clone()),
+                base_url,
+                api_base_url: Some(api_base_url),
                 name: m.name,
                 description: m.description,
                 context_window,
@@ -3636,15 +3734,15 @@ fn default_models(endpoints: &EndpointsConfig) -> IndexMap<String, ModelEntryCon
                 temperature: m.temperature,
                 top_p: m.top_p,
                 max_completion_tokens: m.max_completion_tokens,
-                api_backend: m.api_backend,
+                api_backend,
                 auth_scheme: None,
                 agent_type: m.agent_type,
                 inference_idle_timeout_secs: m.inference_idle_timeout_secs,
-                max_retries: None,
+                max_retries: m.max_retries,
                 rate_limit_retry_threshold: None,
                 subagent_rate_limit_max_attempts: None,
                 api_key: None,
-                env_key: None,
+                env_key,
                 extra_headers: IndexMap::new(),
                 use_concise: false,
                 hidden: m.hidden,
@@ -4300,6 +4398,15 @@ impl ModelEntry {
     /// `None` falls through to the session / global key.
     /// Static only: never consults auth-provider tokens.
     pub(crate) fn own_credential(&self) -> Option<String> {
+        // The built-in Viktor model: `VIKTOR_API_KEY` in the environment wins over the key saved
+        // by `vktr login`, as it does for `vktr acp`, `vktr launch` and `vktr doctor`.
+        if self.model_family.as_deref() == Some("viktor") {
+            return self
+                .env_key
+                .as_ref()
+                .and_then(EnvKeys::resolve_value)
+                .or_else(|| first_own_credential(self.api_key.as_deref(), None));
+        }
         first_own_credential(self.api_key.as_deref(), self.env_key.as_ref())
     }
     /// The provider governing this model's bearer: `None` when a static `api_key`/`env_key` resolves.

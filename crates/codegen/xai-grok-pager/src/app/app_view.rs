@@ -247,7 +247,7 @@ impl DashboardReturn {
 pub enum TickDemand {
     /// Nothing animates or polls: the event loop parks (zero wakeups).
     None,
-    /// Only low-frequency work is pending (welcome logo shimmer at ~12fps, the macOS Cmd link-hover poll): tick at [`SLOW_TICK_INTERVAL`].
+    /// Only low-frequency work is pending (the welcome wordmark's animation at ~12fps until it settles, the macOS Cmd link-hover poll): tick at [`SLOW_TICK_INTERVAL`].
     Slow,
     /// Real animation is on screen: tick at the configured animation fps.
     Fast,
@@ -255,6 +255,15 @@ pub enum TickDemand {
 /// Tick cadence for [`TickDemand::Slow`] (~12fps).
 /// Matches the welcome logo's `SHIMMER_FPS` so slow ticks sample every shimmer frame, and bounds the latency of the macOS Cmd link-hover underline.
 pub const SLOW_TICK_INTERVAL: Duration = Duration::from_millis(83);
+/// The welcome screen ticks only while something on it moves on its own: the wordmark before it settles, or a toast counting down.
+/// Once both are done an idle welcome screen parks; input and resizes still redraw it.
+pub(crate) fn welcome_tick_demand(logo_animating: bool, toast_pending: bool) -> TickDemand {
+    if logo_animating || toast_pending {
+        TickDemand::Slow
+    } else {
+        TickDemand::None
+    }
+}
 /// Welcome toast lifetime (wall clock, so the duration holds whether the event loop is ticking Slow or Fast).
 const WELCOME_TOAST_DURATION: Duration = Duration::from_secs(2);
 fn reconnect_success_hides_mismatch(current: Option<&str>, incoming: &str) -> bool {
@@ -2441,6 +2450,9 @@ impl AppView {
                     menu_rects: &self.welcome_menu_rects,
                     menu_count: if zdr_blocked {
                         2
+                    } else if has_access && self.welcome_menu_rects.is_empty() {
+                        // The splash draws no menu, so arrows must not select hidden rows
+                        0
                     } else {
                         3 + if self.has_claude_import { 1 } else { 0 }
                             + if self.welcome_show_changelog_action {
@@ -3741,7 +3753,9 @@ fn handle_welcome_input(ev: &Event, ctx: &mut WelcomeInputCtx<'_>) -> InputOutco
             }
         }
         if !*ctx.prompt_focused && matches!(ctx.auth_state, AuthState::Done) {
-            if let Some(outcome) = handle_menu_nav(key, ctx.menu_index, ctx.menu_count) {
+            if ctx.menu_count > 0
+                && let Some(outcome) = handle_menu_nav(key, ctx.menu_index, ctx.menu_count)
+            {
                 return outcome;
             }
             if key!(Enter).matches(key)
@@ -5781,7 +5795,10 @@ impl AppView {
                     TickDemand::None
                 }
             }
-            ActiveView::Welcome => TickDemand::Slow,
+            ActiveView::Welcome => welcome_tick_demand(
+                crate::views::welcome::logo_animating(),
+                self.welcome_toast.is_some(),
+            ),
         }
     }
     /// Update the terminal tab title and OSC 9;4 progress bar.

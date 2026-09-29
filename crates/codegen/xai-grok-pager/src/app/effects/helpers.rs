@@ -930,6 +930,53 @@ pub(super) async fn send_authenticate(
         }
     }
 }
+/// vktr sign-in: check the pasted Viktor API key, save it to ~/.vktr/config.toml (owner-only), and
+/// authenticate the agent with it. The key goes to the agent in the request's `_meta`, not through
+/// the environment, which a running multi-threaded process must not change.
+pub(super) async fn save_viktor_key_and_authenticate(
+    tx: &AcpAgentTx,
+    request_seq: u64,
+    key: String,
+) -> TaskResult {
+    let key = key.trim().to_owned();
+    let base_url = match xai_grok_shell::config::load_agent_config_disk_only() {
+        Ok(config) => config.endpoints.resolve_viktor_base_url(),
+        Err(e) => {
+            return TaskResult::AuthFailed {
+                request_seq,
+                error: format!("Could not read ~/.vktr/config.toml: {e}"),
+            };
+        }
+    };
+    if let Err(e) = crate::viktor_key::verify_api_key(&base_url, &key).await {
+        return TaskResult::AuthFailed {
+            request_seq,
+            error: format!("That key did not work against {base_url}: {e:#}"),
+        };
+    }
+    if let Err(e) = crate::viktor_key::save_api_key(&key) {
+        return TaskResult::AuthFailed {
+            request_seq,
+            error: format!("The key works, but saving it failed: {e:#}"),
+        };
+    }
+    let meta = serde_json::json!({ "request_seq": request_seq, "vktr_api_key": key });
+    let req = acp::AuthenticateRequest::new(acp::AuthMethodId::new(
+        xai_grok_shell::agent::auth_method::XAI_API_KEY_METHOD_ID,
+    ))
+    .meta(meta.as_object().cloned());
+    match acp_send(req, tx).await {
+        Ok(resp) => TaskResult::AuthComplete {
+            request_seq,
+            meta: resp.meta.map(serde_json::Value::Object),
+        },
+        Err(e) => TaskResult::AuthFailed {
+            request_seq,
+            error: sanitize_user_error(&e.to_string()),
+        },
+    }
+}
+
 /// Translate a settings-registry key and value into the matching shell helper call.
 /// Type mismatches return an error (not panic) so a spawned task doesn't crash the pager.
 /// Unknown keys also return a descriptive error.

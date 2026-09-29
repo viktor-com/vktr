@@ -24,20 +24,21 @@ fn target_dir() -> Result<PathBuf> {
 fn local_pager_binary_path() -> Result<PathBuf> {
     Ok(target_dir()?
         .join("debug")
-        .join(format!("xai-grok-pager{}", std::env::consts::EXE_SUFFIX)))
+        .join(format!("vktr{}", std::env::consts::EXE_SUFFIX)))
 }
 
 fn ensure_local_pager_binary(binary: &std::path::Path) -> Result<()> {
+    // An existing binary is used as-is. Rebuilding on every test run kept it fresh, but a
+    // nested `cargo build` from inside `cargo test --workspace` blocks on the build lock the
+    // outer cargo holds, and the whole suite wedges. Build the binary first
+    // (`cargo build -p xai-grok-pager-bin`) when you need it current.
+    if binary.exists() {
+        return Ok(());
+    }
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
     let mut cmd = Command::new(&cargo);
     cmd.current_dir(workspace_root()?)
-        .args([
-            "build",
-            "-p",
-            "xai-grok-pager-bin",
-            "--bin",
-            "xai-grok-pager",
-        ])
+        .args(["build", "-p", "xai-grok-pager-bin", "--bin", "vktr"])
         .stdin(Stdio::null())
         .envs(xai_tty_utils::pager_env());
     xai_tty_utils::detach_std_command(&mut cmd);
@@ -62,7 +63,7 @@ fn ensure_local_pager_binary(binary: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
-/// `PAGER_BINARY`, then `CARGO_BIN_EXE_xai-grok-pager`, else build `xai-grok-pager-bin` (the package that owns the binary).
+/// `PAGER_BINARY`, then `CARGO_BIN_EXE_vktr`, else `target/debug/vktr`, built once if absent.
 pub fn pager_binary() -> Result<PathBuf> {
     if let Ok(path) = std::env::var("PAGER_BINARY") {
         let p = PathBuf::from(path);
@@ -74,10 +75,13 @@ pub fn pager_binary() -> Result<PathBuf> {
             .with_context(|| format!("failed to absolutize PAGER_BINARY: {}", p.display()));
     }
 
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_xai-grok-pager") {
-        let p = PathBuf::from(path);
-        if p.exists() {
-            return Ok(p);
+    // The binary is `vktr`; the upstream name is kept for callers that still export it.
+    for var in ["CARGO_BIN_EXE_vktr", "CARGO_BIN_EXE_xai-grok-pager"] {
+        if let Ok(path) = std::env::var(var) {
+            let p = PathBuf::from(path);
+            if p.exists() {
+                return Ok(p);
+            }
         }
     }
 

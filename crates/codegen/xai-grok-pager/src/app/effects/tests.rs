@@ -69,7 +69,8 @@ fn format_acp_error_formats_http_500_dump() {
         );
     assert_eq!(
             format_acp_error(&err, false),
-            "Server error (500): Something went wrong on our side. Wait a minute and send again."
+            // vktr surfaces the server's own text for a 500, never a generic apology.
+            "Server error (500): upstream exploded"
         );
 }
 /// The typed kind in `error.data` (the shell's `terminal_error_data` shape) picks the truncation copy.

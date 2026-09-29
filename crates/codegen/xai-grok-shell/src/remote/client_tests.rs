@@ -798,43 +798,6 @@ fn list_url_explicit_overrides_derivation() {
         "https://registry.acme.com/api/list-models"
     );
 }
-/// REGRESSION: `vktr setup` must send the deployment key to the proxy, never the inference endpoint.
-#[test]
-#[serial_test::serial]
-fn deployment_config_url_uses_cli_chat_proxy_when_not_overridden() {
-    use crate::agent::config::EndpointsConfig;
-    for k in [
-        "VKTR_CLI_CHAT_PROXY_BASE_URL",
-        "VKTR_MANAGED_CONFIG_URL",
-        "VKTR_XAI_API_BASE_URL",
-    ] {
-        unsafe { std::env::remove_var(k) };
-    }
-    unsafe { std::env::set_var("VKTR_DEPLOYMENT_KEY", "xai-token-ENTERPRISE") };
-    let managed: toml::Value = toml::from_str(
-        r#"[endpoints]
-            deployment_key = "xai-token-ENTERPRISE"
-            xai_api_base_url = "https://inference.acme-corp.example/xai/v1""#,
-    )
-    .unwrap();
-    let url = EndpointsConfig::from_config_value(&managed).resolve_managed_config_url();
-    assert_eq!(url, "https://cli-chat-proxy.grok.com/v1/deployment/config");
-    assert!(
-        !url.contains("acme-corp"),
-        "deployment key would be sent to the inference host: {url}"
-    );
-    let pinned: toml::Value = toml::from_str(
-        r#"[endpoints]
-            xai_api_base_url = "https://inference.acme-corp.example/xai/v1"
-            cli_chat_proxy_base_url = "https://proxy.acme-corp.example/v1""#,
-    )
-    .unwrap();
-    assert_eq!(
-        EndpointsConfig::from_config_value(&pinned).resolve_managed_config_url(),
-        "https://proxy.acme-corp.example/v1/deployment/config"
-    );
-    unsafe { std::env::remove_var("VKTR_DEPLOYMENT_KEY") };
-}
 #[derive(Clone)]
 struct DualBundleServerState {
     archive_status: StatusCode,

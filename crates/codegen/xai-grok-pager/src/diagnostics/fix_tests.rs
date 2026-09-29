@@ -1090,6 +1090,9 @@ fn shell_aliases_expand_to_exact_argv_and_bypass_is_explicit() {
         let mut shell = std::process::Command::new(bash);
         shell
             .args(["-ic", &command])
+            // An interactive bash reads ~/.bashrc; with the developer's own rc a `vktr` installed
+            // in ~/.local/bin can shadow the fake one on PATH.
+            .env("HOME", temp.path())
             .env(
                 "PATH",
                 format!(
@@ -1153,6 +1156,7 @@ fn shell_aliases_expand_to_exact_argv_and_bypass_is_explicit() {
     let mut shell = std::process::Command::new(bash);
     shell
         .args(["-ic", "alias ssh='vktr wrap ssh'; command ssh host"])
+        .env("HOME", temp.path())
         .env("CAPTURE", &capture)
         .env(
             "PATH",

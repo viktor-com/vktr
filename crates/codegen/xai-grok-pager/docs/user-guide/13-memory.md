@@ -34,9 +34,7 @@ of the earlier notes becomes a topic, and sections whose name already matches a
 topic are appended to it under a "From earlier sessions" heading. The earlier
 files are left in place unchanged.
 
-Memory product telemetry contains only fixed enums, booleans, counts, and
-durations. It never includes prompts, statements, topic names, keywords,
-paths, model output, or free-form errors.
+vktr sends no product telemetry, so memory activity is not reported anywhere.
 
 ---
 
@@ -84,8 +82,7 @@ The toggle cannot override the process-wide force-disable (`--no-memory` or `VKT
 3. Otherwise memory is enabled by `VKTR_MEMORY=1`, `[memory] enabled = true`,
    or a managed remote setting.
 
-Staged-rollout and kill-switch controls for operators are documented in the
-internal hardening notes, not here.
+Staged-rollout controls are listed under `memory_v2` in the [Configuration reference](26-config-reference.md).
 
 ---
 
@@ -479,6 +476,6 @@ $EDITOR ~/.vktr/memory/MEMORY.md
 ### Debug Logging
 
 ```bash
-RUST_LOG=debug VKTR_LOG_FILE=/tmp/grok.log vktr
-grep "memory" /tmp/grok.log
+RUST_LOG=debug VKTR_LOG_FILE=/tmp/vktr.log vktr
+grep "memory" /tmp/vktr.log
 ```

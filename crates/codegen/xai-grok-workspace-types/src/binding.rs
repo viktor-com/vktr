@@ -193,7 +193,7 @@ pub fn resolve_repo_sources(
 /// Kept in lockstep with the export seed (`.project_id`, `.github_repo`) and local `info/exclude` (`.vktr/`).
 /// That keeps machine state out of BYO remotes and user commits.
 pub const DEFAULT_GITIGNORE: &str = "\
-# Seeded by Grok app workspaces. Secrets and machine state never belong in git;
+# Seeded by vktr workspaces. Secrets and machine state never belong in git;
 # they live in the env/secret store, not the working tree.
 
 # Secrets / env
@@ -225,7 +225,7 @@ build/
 # App-workspace machine state (must not enter BYO remotes)
 .project_id
 .github_repo
-.grok/
+.vktr/
 ";
 
 #[cfg(test)]

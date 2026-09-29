@@ -35,7 +35,15 @@ pub fn should_probe_first_party_env_key(
     has_env_key: bool,
     preferred_method_pinned: bool,
 ) -> bool {
-    !disable_api_key_auth && !has_byok && has_env_key && !preferred_method_pinned
+    // vktr: the probe targets xAI's `/api-key` endpoint, which Viktor does not serve; an env key is
+    // trusted as-is and any auth problem surfaces on the first request instead.
+    let _ = (
+        disable_api_key_auth,
+        has_byok,
+        has_env_key,
+        preferred_method_pinned,
+    );
+    false
 }
 
 /// How many retries follow the initial attempt.
@@ -209,16 +217,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn probes_only_when_env_key_alone_would_suppress_login() {
-        // Happy path: env key present, nothing else blocking.
-        assert!(should_probe_first_party_env_key(false, false, true, false));
-        // A kill switch, BYOK, a missing env key, or any pin each skip the probe and treat the key as usable
-        assert!(!should_probe_first_party_env_key(true, false, true, false));
-        assert!(!should_probe_first_party_env_key(false, true, true, false));
-        assert!(!should_probe_first_party_env_key(
-            false, false, false, false
-        ));
-        assert!(!should_probe_first_party_env_key(false, false, true, true));
+    fn never_probes_the_xai_api_key_endpoint() {
+        // vktr: Viktor serves no `/api-key`; an env key is trusted and auth errors surface on the first request.
+        for disable in [false, true] {
+            for byok in [false, true] {
+                for env_key in [false, true] {
+                    for pinned in [false, true] {
+                        assert!(!should_probe_first_party_env_key(
+                            disable, byok, env_key, pinned
+                        ));
+                    }
+                }
+            }
+        }
     }
 
     #[test]

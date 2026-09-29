@@ -130,9 +130,9 @@ impl ThemeKind {
     /// Alternate lowercase spellings accepted by [`from_name`](Self::from_name), excluding [`display_name`](Self::display_name).
     pub fn aliases(self) -> &'static [&'static str] {
         match self {
-            Self::GrokNight => &["grok-night", "dark"],
+            Self::GrokNight => &["vktrnight", "vktr-night", "grok-night", "dark", "night"],
             Self::TokyoNight => &["tokyo-night", "tokyo"],
-            Self::GrokDay => &["grok-day", "light", "day"],
+            Self::GrokDay => &["vktrday", "vktr-day", "grok-day", "light", "day"],
             Self::RosePineMoon => &["rosepine", "rose-pine", "rose-pine-moon"],
             Self::OscuraMidnight => &["oscura"],
             Self::Terminal => &["terminal-default", "transparent", "native"],
@@ -285,6 +285,11 @@ impl Theme {
             md_code_bg: q(self.md_code_bg),
             md_text: q(self.md_text),
             link_fg: q(self.link_fg),
+
+            brand: q(self.brand),
+            brand_deep: q(self.brand_deep),
+            brand_glint: q(self.brand_glint),
+            brand_gradient: self.brand_gradient.map(q),
         }
     }
 
@@ -549,6 +554,11 @@ impl Theme {
             md_task_checked: green,
             md_task_unchecked: muted_fg,
             link_fg: blue,
+            brand: magenta,
+            brand_deep: magenta,
+            brand_glint: Color::White,
+            // ANSI16 has no peach or cream slot; the ramp folds onto the brand's magenta with a yellow tail
+            brand_gradient: [blue, magenta, magenta, magenta, yellow],
             diff_equal_fg: muted_fg,
             diff_gutter_fg: muted_fg,
             ..self
@@ -1053,6 +1063,44 @@ mod tests {
                     delta <= -30,
                     "{kind:?}: thumb (Σ{thumb}) must be ≥30 darker than \
                      track (Σ{track}) on a light theme, got Δ{delta}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn vktr_night_brand_gradient_is_the_hero_gradient() {
+        use ratatui::style::Color;
+        let t = Theme::groknight();
+        assert_eq!(t.brand_gradient_at(0.0), Color::Rgb(0x1E, 0x00, 0x79));
+        assert_eq!(t.brand_gradient_at(0.45), Color::Rgb(0x77, 0x49, 0xFF));
+        assert_eq!(t.brand_gradient_at(0.70), Color::Rgb(0x95, 0x80, 0xFF));
+        assert_eq!(t.brand_gradient_at(0.88), Color::Rgb(0xFF, 0xBD, 0x9E));
+        assert_eq!(t.brand_gradient_at(1.0), Color::Rgb(0xFF, 0xF5, 0xAC));
+        // Clamped outside 0..=1 and safe on NaN
+        assert_eq!(t.brand_gradient_at(-3.0), t.brand_gradient_at(0.0));
+        assert_eq!(t.brand_gradient_at(7.0), t.brand_gradient_at(1.0));
+        assert_eq!(t.brand_gradient_at(f32::NAN), t.brand_gradient_at(0.0));
+        // Between stops it interpolates
+        assert!(matches!(t.brand_gradient_at(0.8), Color::Rgb(..)));
+        assert_ne!(t.brand_gradient_at(0.8), t.brand_gradient_at(0.88));
+    }
+
+    #[test]
+    fn brand_gradient_degrades_with_the_terminal() {
+        use ratatui::style::Color;
+        for theme in [Theme::groknight(), Theme::grokday()] {
+            let q256 = theme.quantized(color_support::ColorLevel::Ansi256);
+            for i in 0..=20 {
+                let c = q256.brand_gradient_at(i as f32 / 20.0);
+                assert!(matches!(c, Color::Indexed(_)), "256-color must stay indexed, got {c:?}");
+            }
+            let basic = theme.quantized(color_support::ColorLevel::Basic).ansi16_chrome_overrides(true);
+            for i in 0..=20 {
+                let c = basic.brand_gradient_at(i as f32 / 20.0);
+                assert!(
+                    basic.brand_gradient.contains(&c),
+                    "16-color must snap to a stop, got {c:?}"
                 );
             }
         }

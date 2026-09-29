@@ -1,0 +1,35 @@
+# Paths that scripts/rebrand.pl leaves exactly as upstream ships them when
+# scripts/upstream.py builds the rebranded vendor tree. One fnmatch glob per
+# line, relative to the repo root; `*` also matches `/`. Binary files and
+# symlinks are always skipped.
+#
+# `python3 scripts/upstream.py check-rebrand` reports files this list and the
+# rebrand rules get wrong compared with HEAD; keep its "over-applied" count at 0.
+
+# License, attribution and lock files
+*LICEN[CS]E*
+*NOTICE
+THIRD-PARTY-NOTICES
+Cargo.lock
+
+# Upstream release history data (the Markdown release notes are rebranded)
+crates/codegen/xai-grok-shell/changelogs/*.json
+
+# Upstream distribution channels vktr does not ship (their READMEs are rebranded)
+crates/codegen/xai-grok-pager/npm/*.js
+crates/codegen/xai-grok-pager/npm/*.json
+crates/codegen/xai-grok-pager/scripts/install*
+
+# PTY harness scenarios
+crates/codegen/xai-grok-pager-pty-harness/tests/scenarios/*
+
+# Generated protocol bindings and wire definitions
+crates/common/xai-tool-protocol/generated/*
+crates/codegen/xai-grok-tools-api/proto/*
+
+# Individual files kept as upstream
+clippy.toml
+crates/codegen/xai-grok-hooks/examples/hooks/bin/*
+crates/codegen/xai-grok-sandbox/src/hook_write_deny.rs
+crates/codegen/xai-grok-shell/.gitignore
+crates/codegen/xai-grok-shell/tests/memory_integration/run_tests.py

@@ -806,6 +806,11 @@ mod tests {
 
     #[test]
     fn default_path_sources_from_fresh_home_not_once_lock() {
+        // Both sides read `$VKTR_HOME` live; hold the env lock so a sibling test cannot
+        // repoint it between the two reads.
+        let _lock = crate::ENV_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         assert_eq!(
             TrustStore::default_path(),
             xai_dirs::resolve_grok_home()

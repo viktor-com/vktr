@@ -10,16 +10,11 @@ const MAX_WORKFLOW_NAME_BYTES: usize = 64;
 pub(crate) struct BuiltinWorkflow {
     pub name: &'static str,
     pub script: &'static str,
-    pub path: &'static str,
 }
 
 pub(crate) const BUILTIN_WORKFLOWS: &[BuiltinWorkflow] = &[BuiltinWorkflow {
     name: "deep-research",
     script: include_str!("../workflows/deep_research.rhai"),
-    path: concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/session/workflows/deep_research.rhai"
-    ),
 }];
 
 pub(crate) struct ResolvedWorkflow {
@@ -115,7 +110,8 @@ fn cached_builtin_entries() -> Vec<RegistryEntry> {
             script: builtin.script.to_string(),
             source: WorkflowSource::Builtin,
             source_label: "builtin",
-            path: Some(PathBuf::from(builtin.path)),
+            // Compiled in: there is no file on the user's machine to point at.
+            path: None,
         })
         .collect()
 }

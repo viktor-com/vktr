@@ -556,7 +556,7 @@ fn cancel_login_strips_reauth_prompt_from_scrollback() {
 
 /// Empty `auth_methods` (the preferred_method pin is unavailable) must not invent `grok.com` or start an OIDC flow the agent did not advertise.
 #[test]
-fn login_with_empty_auth_methods_fails_closed() {
+fn login_is_a_viktor_key_paste_box_that_needs_no_login_method_and_opens_no_browser() {
     let mut app = test_app_with_agent();
     app.auth_methods.clear();
     app.login_method_id = None;
@@ -565,23 +565,28 @@ fn login_with_empty_auth_methods_fails_closed() {
 
     assert!(
         effects.is_empty(),
-        "must not start Authenticate without an advertised method"
+        "vktr starts no OIDC/browser flow: {effects:?}"
     );
-    assert_eq!(
-        app.active_view,
-        ActiveView::Agent(AgentId(0)),
-        "must stay on the session view"
-    );
+    assert_eq!(app.active_view, ActiveView::Welcome);
     assert!(
         matches!(
             &app.auth_state,
-            AuthState::Pending { error: Some(msg) }
-                if msg.contains("preferred_method=api_key")
+            AuthState::Authenticating {
+                mode: AuthMode::Loopback,
+                auth_url: None,
+                ..
+            }
         ),
-        "must surface pin-unavailable error, got {:?}",
+        "the paste box, got {:?}",
         app.auth_state
     );
-    assert!(app.login_method_id.is_none());
+
+    // Submitting the box verifies and saves the pasted key.
+    let effects = dispatch(Action::SubmitAuthCode("zt_live_sk_x".into()), &mut app);
+    assert!(
+        matches!(effects.as_slice(), [Effect::SaveViktorKey { key, .. }] if key == "zt_live_sk_x"),
+        "{effects:?}"
+    );
 }
 
 /// Puts the app in `Authenticating` with a live task's abort handle installed, as the event loop would.
@@ -639,10 +644,8 @@ fn login_while_authenticating_aborts_prior_task() {
         other => panic!("expected Authenticating after re-Login, got {other:?}"),
     }
     assert!(
-        effects
-            .iter()
-            .any(|e| matches!(e, Effect::Authenticate { .. })),
-        "re-login must emit a new Authenticate"
+        effects.is_empty(),
+        "vktr's re-login shows a fresh paste box; nothing to start"
     );
 }
 

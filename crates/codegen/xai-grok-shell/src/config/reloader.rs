@@ -791,7 +791,7 @@ mod tests {
         let config: toml::Value = toml::from_str(
             r#"
 [skills]
-paths = ["/home/user/.grok/skills"]
+paths = ["/home/user/.vktr/skills"]
 ignore = ["/tmp"]
 "#,
         )

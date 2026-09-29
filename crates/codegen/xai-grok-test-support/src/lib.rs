@@ -141,4 +141,4 @@ pub use process::{
 };
 pub use resources::{ResourceGrowth, ResourceSnapshot, RssMeasurement, RssOutcome, RssSampler};
 pub use sandbox::{TestSandbox, TestSandboxBuilder};
-pub use tools::{DAEMON_SPAWN_TOOL, VKTR_BUILD_SPAWN_TOOL, Tool};
+pub use tools::{DAEMON_SPAWN_TOOL, Tool, VKTR_BUILD_SPAWN_TOOL};

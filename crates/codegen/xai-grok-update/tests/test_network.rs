@@ -295,14 +295,14 @@ async fn download_silent_writes_body_to_dest() {
     let server = MockServer::start().await;
     let body = b"binary contents \x00\x01\x02".to_vec();
     Mock::given(method("GET"))
-        .and(path("/grok-0.1.181-macos-aarch64"))
+        .and(path("/vktr-0.1.181-macos-aarch64"))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(body.clone()))
         .mount(&server)
         .await;
 
     let tmp = tempfile::tempdir().unwrap();
     let dest = tmp.path().join("vktr");
-    let url = format!("{}/grok-0.1.181-macos-aarch64", server.uri());
+    let url = format!("{}/vktr-0.1.181-macos-aarch64", server.uri());
     download_silent(&url, &dest).await.unwrap();
 
     let written = std::fs::read(&dest).unwrap();
@@ -365,7 +365,7 @@ async fn download_silent_publishes_executable() {
         .await;
 
     let tmp = tempfile::tempdir().unwrap();
-    let dest = tmp.path().join("grok-0.1.181-linux-x86_64");
+    let dest = tmp.path().join("vktr-0.1.181-linux-x86_64");
     download_silent(&format!("{}/bin", server.uri()), &dest)
         .await
         .unwrap();

@@ -1,7 +1,7 @@
 [package]
 license = "Apache-2.0"
 name = "xai-grok-shell"
-version = "1.0.38"
+version = "1.0.38-vktr.2"
 edition.workspace = true
 
 [features]
@@ -270,10 +270,6 @@ required-features = ["test-support"]
 
 [[test]]
 name = "test_startup_prefetch_policy"
-required-features = ["test-support"]
-
-[[test]]
-name = "test_startup_prefetch_repair_skip"
 required-features = ["test-support"]
 
 [[test]]

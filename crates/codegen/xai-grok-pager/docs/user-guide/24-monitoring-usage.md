@@ -1,27 +1,16 @@
 # Monitoring Usage (External OpenTelemetry)
 
+vktr has no telemetry of its own: it sends no product analytics, uploads no traces, and has no feedback service. This page covers the one optional usage stream it keeps from upstream, which goes only to an OpenTelemetry collector **you** run. It is off unless you turn it on.
+
+For token usage of a single session, `vktr usage` prints the persisted token and cost usage, and `vktr -p --json` includes `usage` in its result (see [Headless Mode](14-headless-mode.md)).
+
 > **Status: alpha.** The schema below is versioned (`grok_code.schema.version = v1`);
 > additive changes may occur without notice, renames/removals will bump the
 > version and be called out in the changelog.
 
-vktr CLI can export usage **metrics** and **events** to your organization's
+vktr can export usage **metrics** and **events** to your organization's
 own OpenTelemetry collector, so platform teams can monitor adoption, token
-consumption, tool-permission decisions, and errors across the fleet — without
-any data flowing through SpaceXAI.
-
-## Related settings
-
-These knobs are independent of each other (and of this guide's external OTEL stream):
-
-| Setting | How to set it |
-|---------|---------------|
-| Telemetry master switch | `[features] telemetry` / `VKTR_TELEMETRY_ENABLED` |
-| Coding data, retention, and training | Settings — `/privacy` opens the row |
-| Trace upload | `[telemetry] trace_upload` / `VKTR_TELEMETRY_TRACE_UPLOAD` |
-| External OpenTelemetry | `VKTR_EXTERNAL_OTEL` / `[telemetry] otel_*` (this guide) |
-
-See also [Authentication](02-authentication.md#related-settings) and
-[Configuration](05-configuration.md#telemetry).
+consumption, tool-permission decisions, and errors across the fleet.
 
 ## External OTEL stream
 
@@ -32,31 +21,17 @@ The external stream is:
 - **Content-free by default**: no prompts, no assistant prose, no code, no file
   paths (extension only), no tool arguments, no bash commands, and MCP/skill/plugin
   names collapsed to categories. Optional content gates re-enable some of these.
-- **Structurally separate** from SpaceXAI-internal telemetry: its exporters carry
-  only the headers you configure, never SpaceXAI credentials.
-- **Independent of SpaceXAI data-retention opt-outs**: it works even when
-  `telemetry` is disabled and for ZDR (zero-data-retention) teams. Those
-  settings govern SpaceXAI-side retention; the external stream is governed solely
-  by your own OTEL configuration.
+- **Carries only the headers you configure**, never your Viktor API key.
 
-### ZDR and this stream
-
-`/privacy` and Zero Data Retention do **not** disable this stream. ZDR turns
-off SpaceXAI-side retention (product analytics, session-trace upload,
-coding-data sharing). It does not mute `VKTR_EXTERNAL_OTEL`.
+### Identity on this stream
 
 When the stream is on:
 
-- `user.id`, `session.id`, and org/team/deployment ids always export.
-- `user.email` attaches on logs **and** metrics whenever OAuth/gateway auth
-  has a non-empty address. It is identity, not a content gate, and is not
-  pinnable except by turning the stream off.
+- `user.id`, `session.id`, and org/team/deployment ids export when known.
+- `user.email` is only attached for OAuth or gateway sign-ins, which vktr does
+  not have, so with a Viktor API key it is not exported.
 - Prompt text, assistant `response`, and tool bodies export only when their
-  gates are on. First-party product analytics never receive those bodies.
-
-To keep ZDR machines collector-silent, pin `otel_enabled = false` (or do not
-enable the stream). For a metrics-only SIEM, pin all four `otel_log_*` keys
-`false`.
+  gates are on.
 
 ## Quick start
 
@@ -78,7 +53,7 @@ without the master switch.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `VKTR_EXTERNAL_OTEL` | `0` | Master switch. Distinct from `VKTR_TELEMETRY_ENABLED`, which controls SpaceXAI-internal product analytics — the two govern opposite-pointing data flows. |
+| `VKTR_EXTERNAL_OTEL` | `0` | Master switch. |
 | `OTEL_METRICS_EXPORTER` | `none` | `otlp` \| `console` \| `none`. |
 | `OTEL_LOGS_EXPORTER` | `none` | `otlp` \| `console` \| `none`. Gates the event stream. |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | `http/protobuf` \| `grpc`. Base protocol for both signals. |
@@ -118,13 +93,6 @@ otel_log_tool_content = false          # bodies; independent of details
 
 `OTEL_RESOURCE_ATTRIBUTES` is deliberately ignored: the resource is built
 from a fixed, audited attribute set.
-
-> **Migration note:** older releases could share `OTEL_EXPORTER_OTLP_*` with
-> the product's own analytics pipeline. That behavior is deprecated: when
-> `VKTR_EXTERNAL_OTEL` is set, product analytics ignores those vars, and the
-> CLI refuses to activate the external stream in any configuration where
-> product analytics already consumed them — your collector only receives the
-> external stream you opted into.
 
 ## Config file
 
@@ -176,29 +144,12 @@ The external stream exports **logs and metrics only** (no customer-facing
 traces exporter).
 
 Fleet enablement is one signed `requirements.toml` (destination, exporters,
-and content gates together). `user.email` is not a pin key — it follows
-OAuth/gateway identity. Headers stay in the process environment from the
+and content gates together). Headers stay in the process environment from the
 launcher after strip, never in this TOML.
 
-## Startup suppression (why nothing arrives for the first few seconds)
+## Startup
 
-Because xAI can force-disable this stream fleet-wide, the CLI holds emission
-closed at startup until it knows whether that switch is set — it fetches the
-fleet policy from `/v1/settings` and only then starts exporting. In a healthy
-setup that is well under a second and invisible.
-
-**The wait is bounded**, so a deployment that cannot reach xAI still exports:
-
-- If no fleet policy can apply at all — `[features] remote_fetch = false`, or
-  `[endpoints] cli_chat_proxy_base_url` points somewhere other than xAI — the
-  stream starts immediately, governed by your local configuration.
-- If the policy fetch fails or never completes (firewalled host, offline
-  laptop), emission starts anyway once the attempt is exhausted, and in all
-  cases no later than 30 seconds after startup.
-
-A fleet policy that arrives afterwards still applies; it can only ever
-*tighten* (disable the stream or force the content gates off), never enable
-something your local configuration did not.
+Upstream held this stream closed at startup until it had fetched an xAI fleet policy. That policy only applies when the configured chat endpoint is xAI's, and vktr's is Viktor's, so the stream starts immediately, governed by your local configuration.
 
 If your collector receives nothing at all, check the debug log
 (`vktr --debug`) for `external otel:` lines — they record whether the stream
@@ -208,7 +159,7 @@ resolved its configuration, and whether it is exporting or suppressed.
 
 | Attribute | Value |
 |---|---|
-| `service.name` | `grok-cli` |
+| `service.name` | `grok-cli` (upstream name, kept so existing dashboards keep working) |
 | `service.version`, `client.version` | build/client versions |
 | `app.entrypoint` | `cli` \| `headless` \| `agent` |
 | `terminal.type` | terminal emulator brand |
@@ -216,13 +167,11 @@ resolved its configuration, and whether it is exporting or suppressed.
 
 Identity attributes (`user.id`, and `organization.id` / `team.id` /
 `deployment.id` when known) are attached per metric data point and per event
-once authentication completes. `user.email` is attached on logs **and** metrics
-whenever the session is signed in with OAuth or a gateway account that has a
-non-empty address — it is identity, not a content gate, and is never taken from
-git, an API key, or a deployment key. `prompt.id` (per-prompt UUID) appears on
+once authentication completes. `user.email` is never taken from git or an API
+key, so it is not exported with a Viktor key. `prompt.id` (per-prompt UUID) appears on
 events only, never metrics.
 
-## Metrics (meter scope `ai.xai.grok_code`)
+## Metrics (meter scope `ai.xai.grok_code`, the upstream name)
 
 | Metric | Unit | Attributes |
 |---|---|---|
@@ -324,8 +273,7 @@ machine fingerprints, subscription tier. Prompt text, assistant `response`,
 file paths, tool-arg previews, and CONTENT bodies (`tool_input`, `tool_output`,
 `full_command`, `error_message`) export only when their gate is on; first-party
 product analytics never receive those bodies.
-`user.email` exports whenever OAuth/gateway auth has an address (not a content
-gate).
+`user.email` is never exported with a Viktor API key.
 
 ## Example collector config
 

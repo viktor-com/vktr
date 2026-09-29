@@ -74,7 +74,16 @@ fn sudo_alias_injection() -> String {
 /// functions, and aliases as base64-encoded replayable shell snippets.
 const DUMP_BASH_STATE_SCRIPT: &str = r##"
 dump_bash_state() {
+  # Options are restored on return (`local -`, bash 4.4+). The user's allexport state is
+  # captured below before it is switched off for this function's own work: under `set -a`
+  # every local here would be exported, the multi-kilobyte blobs included, and the next
+  # execve would fail with "Argument list too long" (exit 126).
+  local -
   set -euo pipefail
+  local posix_opts
+  posix_opts=$(builtin shopt -po 2>/dev/null | command grep -vE '^set [-+]o (nounset|errexit|pipefail)$' || true)
+  builtin declare +x posix_opts 2>/dev/null
+  set +a
   if ! command -v base64 >/dev/null 2>&1; then
     echo "Error: base64 command is required" >&2
     return 1
@@ -84,6 +93,9 @@ dump_bash_state() {
     builtin printf '%s\n' "$1"
   }
 
+  # The replay runs in the next command's shell, possibly under the user's `set -a`: each
+  # snapshot variable is un-exported before use and unset afterwards, so the blobs never
+  # reach a child's environment.
   _emit_encoded() {
     local content="$1"
     local var_name="$2"
@@ -92,7 +104,7 @@ dump_bash_state() {
       command base64 <<<"$content" | command tr -d '\n'
       builtin printf '\nVKTR_SNAP_EOF_%s\n' "$var_name"
       builtin printf ')\n'
-      builtin printf 'eval "$grok_snap_%s"\n' "$var_name"
+      builtin printf 'builtin declare +x grok_snap_%s 2>/dev/null; eval "$grok_snap_%s"; builtin unset grok_snap_%s\n' "$var_name" "$var_name" "$var_name"
     fi
   }
 
@@ -104,10 +116,8 @@ dump_bash_state() {
   env_vars=$(builtin export -p 2>/dev/null | command grep -viE '_proxy=|VKTR_SANDBOX|VKTR_AGENT=|SUDO_ASKPASS|VKTR_ASKPASS|ELECTRON_RUN_AS_NODE|SSH_AUTH_SOCK|DBUS_SESSION_BUS_ADDRESS|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|GPG_TTY' || true)
   _emit_encoded "$env_vars" "ENV_VARS_B64"
 
-  # errexit/pipefail here are this function's own `set -euo pipefail` (set is
-  # shell-global in bash); replaying them would abort later user commands.
-  local posix_opts
-  posix_opts=$(builtin shopt -po 2>/dev/null | command grep -vE '^set [-+]o (nounset|errexit|pipefail)$' || true)
+  # errexit/pipefail are this function's own `set -euo pipefail`; replaying them would abort
+  # later user commands, so they were filtered when the options were captured above.
   _emit_encoded "$posix_opts" "POSIX_OPTS_B64"
 
   local bash_opts
@@ -133,6 +143,12 @@ const DUMP_ZSH_STATE_SCRIPT: &str = r##"
 function dump_zsh_state() {
   emulate -L zsh -o errreturn -o pipefail
   set -u
+  # `emulate -L` localises options; the user's allexport is captured by the setopt listing
+  # below before it is switched off here, so this function's own locals are never exported.
+  local zsh_opts
+  zsh_opts=$(setopt 2>/dev/null | command grep -vE '^(nounset|errexit|errreturn|pipefail)$' | command awk '{printf "builtin setopt %s 2>/dev/null || true\n", $0}' || true)
+  builtin typeset +x zsh_opts 2>/dev/null
+  builtin unsetopt allexport 2>/dev/null
 
   builtin zmodload -F zsh/parameter p:parameters p:options p:functions p:aliases p:galiases p:saliases 2>/dev/null || true
 
@@ -148,7 +164,7 @@ function dump_zsh_state() {
       command base64 <<<"$content" | command tr -d '\n'
       builtin printf '\nVKTR_SNAP_EOF_%s\n' "$var_name"
       builtin printf ')\n'
-      builtin printf 'eval "$grok_snap_%s"\n' "$var_name"
+      builtin printf 'builtin typeset +x grok_snap_%s 2>/dev/null; eval "$grok_snap_%s"; builtin unset grok_snap_%s\n' "$var_name" "$var_name" "$var_name"
     fi
   }
 
@@ -160,11 +176,8 @@ function dump_zsh_state() {
   env_vars=$(builtin typeset -xp 2>/dev/null | command grep -viE '_proxy=|VKTR_SANDBOX|VKTR_AGENT=|SUDO_ASKPASS|VKTR_ASKPASS|ELECTRON_RUN_AS_NODE|SSH_AUTH_SOCK|DBUS_SESSION_BUS_ADDRESS|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|GPG_TTY' || true)
   _emit_encoded "$env_vars" "ENV_VARS_B64"
 
-  # errreturn/pipefail here are this function's own `emulate -L` options
-  # (setopt lists them while inside); replaying them would abort later user
-  # commands.
-  local zsh_opts
-  zsh_opts=$(setopt 2>/dev/null | command grep -vE '^(nounset|errexit|errreturn|pipefail)$' | command awk '{printf "builtin setopt %s 2>/dev/null || true\n", $0}' || true)
+  # errreturn/pipefail are this function's own `emulate -L` options; they were filtered when
+  # the options were captured above, so replaying cannot abort later user commands.
   _emit_encoded "$zsh_opts" "ZSH_OPTS_B64"
 
   local all_functions
@@ -924,6 +937,14 @@ mod tests {
 
         let code = output.status.code().unwrap_or(-1);
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        if code != 0 {
+            // Shell-level diagnostics (not the user command's) land here; surface them so a
+            // failing fixture explains itself instead of reporting a bare exit code.
+            eprintln!(
+                "run_command exit {code}, wrapper stderr: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
         (code, stdout)
     }
 
@@ -1113,8 +1134,8 @@ mod tests {
 
         // Turn on allexport; the option is captured by the dump and replayed
         // into every subsequent command's shell.
-        let (code, _) = run_command(&mut state, "set -a").await;
-        assert_eq!(code, 0);
+        let (code, stdout) = run_command(&mut state, "set -a").await;
+        assert_eq!(code, 0, "set -a failed, stdout={stdout:?}");
 
         // This command's wrapper assigns __grok_user_cmd under allexport. printenv only sees
         // exported vars — it must not see the temp var (neither from this command's own assignment

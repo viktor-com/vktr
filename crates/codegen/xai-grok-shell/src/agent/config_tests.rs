@@ -1,3 +1,7 @@
+// Tests that pinned xAI-specific routing (cli-chat-proxy, api.x.ai, enterprise endpoints), the
+// remote managed-config kill switch, and a remote model list *replacing* the bundled catalog were
+// removed: vktr has one built-in model, a remote listing only ever adds to it, and none of those
+// services exist in the fork.
 use super::*;
 use serial_test::serial;
 use xai_grok_test_support::EnvGuard;
@@ -531,54 +535,6 @@ async fn aux_model_with_auth_provider_never_reroutes() {
     .expect("warm cache resolves");
     assert_eq!(resolved.base_url, "https://litellm.example/v1");
     assert_eq!(resolved.api_key.as_deref(), Some("aux-token"));
-}
-/// The session bearer resolver must never be stamped onto a third-party sampler: the sampler substitutes the resolver's bearer at request time.
-#[test]
-fn session_resolver_is_not_stamped_onto_third_party_samplers() {
-    #[derive(Debug)]
-    struct SessionResolver;
-    impl xai_grok_sampler::BearerResolver for SessionResolver {
-        fn current_bearer(&self) -> Option<String> {
-            Some("session-jwt".into())
-        }
-    }
-    let session_cfg = SamplerConfig {
-        bearer_resolver: Some(std::sync::Arc::new(SessionResolver)),
-        conversation_group_id: Some("root-group".into()),
-        ..SamplerConfig::default()
-    };
-    let mut third_party = SamplerConfig {
-        base_url: "https://litellm.corp.example/v1".into(),
-        ..SamplerConfig::default()
-    };
-    stamp_session_local_sampler_fields(&mut third_party, &session_cfg, None, None);
-    assert!(
-        third_party.bearer_resolver.is_none(),
-        "a third-party endpoint must keep its resolved credential"
-    );
-    assert_eq!(
-        third_party
-            .conversation_group_id
-            .as_ref()
-            .map(|id| id.as_ref()),
-        Some("root-group")
-    );
-    let mut first_party = SamplerConfig {
-        base_url: EndpointsConfig::default().resolve_inference_base_url(),
-        ..SamplerConfig::default()
-    };
-    stamp_session_local_sampler_fields(&mut first_party, &session_cfg, None, None);
-    assert!(
-        first_party.bearer_resolver.is_some(),
-        "first-party aux samplers keep the session refresh behavior"
-    );
-    assert_eq!(
-        first_party
-            .conversation_group_id
-            .as_ref()
-            .map(|id| id.as_ref()),
-        Some("root-group")
-    );
 }
 /// A cold cache disables web search rather than sending an unauthenticated request.
 #[tokio::test]
@@ -1651,10 +1607,13 @@ fn auth_scheme_defaults_to_bearer_when_not_set_in_config() {
 #[test]
 fn has_own_credentials_guards_session_vs_external_key() {
     let endpoints = EndpointsConfig::default();
+    // vktr's built-in model is keyed by an environment variable (VIKTOR_API_KEY) and never by a
+    // baked key. `has_own_credentials()` would read that variable live, and sibling tests set and
+    // clear it, so pin the contract on the entry itself instead.
     for (model_id, entry) in default_model_entries(&endpoints) {
         assert!(
-            !entry.has_own_credentials(),
-            "{model_id}: Default model must not claim own credentials"
+            entry.api_key.is_none() && entry.env_key.is_some(),
+            "{model_id}: the built-in model must name an env key and carry no baked key"
         );
     }
     let config_model = test_model_entry(
@@ -3126,7 +3085,8 @@ fn e2e_user_overrides_default_model_with_api_key() {
     let model = models.get(dm).expect("model should exist");
     assert_eq!(model.info.base_url, "https://my-proxy.example.com/v1");
     assert_eq!(model.api_key.as_deref(), Some("my-custom-api-key"));
-    assert!(model.env_key.is_none());
+    // The built-in viktor entry names its env key; a user override keeps it as the fallback,
+    // and the explicit api_key still wins below.
     let sampling = resolve_sampling(model, Some("session-token"));
     assert_eq!(
         sampling.api_key.as_deref(),
@@ -3191,35 +3151,6 @@ fn config_models_default_custom_model_is_in_resolved_model_list() {
     let model = models.get("acme-grok").unwrap();
     assert_eq!(model.info.model, "grok-4.5");
     assert_eq!(model.info.base_url, "https://inference.example.com/v1");
-}
-#[test]
-fn e2e_default_model_with_session_routes_to_proxy() {
-    let (_, models) = resolve_models_from_toml("", None);
-    let model = models
-        .get(crate::models::default_model())
-        .expect("default model should exist");
-    let sampling = resolve_sampling(model, Some("session-token-123"));
-    assert_eq!(sampling.api_key.as_deref(), Some("session-token-123"));
-    assert_eq!(
-        sampling.base_url, "https://cli-chat-proxy.grok.com/v1",
-        "session auth should route to cli-chat-proxy, not api.x.ai"
-    );
-}
-#[test]
-#[serial]
-fn e2e_default_model_with_external_api_key_routes_to_api_xai() {
-    let (_, models) = resolve_models_from_toml("", None);
-    let model = models
-        .get(crate::models::default_model())
-        .expect("default model should exist");
-    unsafe { std::env::set_var("XAI_API_KEY", "xai-external-key") };
-    let sampling = resolve_sampling(model, None);
-    assert_eq!(sampling.api_key.as_deref(), Some("xai-external-key"));
-    assert_eq!(
-        sampling.base_url, "https://api.x.ai/v1",
-        "external API key should route to api.x.ai via api_base_url"
-    );
-    unsafe { std::env::remove_var("XAI_API_KEY") };
 }
 #[test]
 fn e2e_user_config_overrides_prefetched_model() {
@@ -3310,40 +3241,6 @@ fn e2e_credential_priority_model_key_beats_session_beats_env() {
     );
 }
 #[test]
-fn e2e_duplicate_model_field_both_entries_survive() {
-    let dm = crate::models::default_model();
-    let (_, models) = resolve_models_from_toml(
-        &format!(
-            r#"
-            [model.acme-grok]
-            model = "{dm}"
-            base_url = "https://inference.example.com/v1"
-            context_window = 200000
-            api_key = "enterprise-key"
-            "#,
-        ),
-        None,
-    );
-    assert!(models.contains_key(dm), "default entry should still exist");
-    assert!(
-        models.contains_key("acme-grok"),
-        "user entry with different key should also exist"
-    );
-    let default = models.get(dm).unwrap();
-    let user = models.get("acme-grok").unwrap();
-    assert_eq!(default.info.model, user.info.model, "same model field");
-    assert_ne!(
-        default.info.base_url, user.info.base_url,
-        "different base_urls"
-    );
-    let sampling = resolve_sampling(user, None);
-    assert_eq!(sampling.api_key.as_deref(), Some("enterprise-key"));
-    assert_eq!(sampling.base_url, "https://inference.example.com/v1");
-    let sampling = resolve_sampling(default, Some("session-key"));
-    assert_eq!(sampling.api_key.as_deref(), Some("session-key"));
-    assert_eq!(sampling.base_url, "https://cli-chat-proxy.grok.com/v1",);
-}
-#[test]
 fn e2e_enterprise_custom_endpoint_skips_xai_defaults() {
     let mut cfg = Config::default();
     cfg.endpoints.models_base_url = Some("https://enterprise.acme.com/v1".to_owned());
@@ -3414,66 +3311,6 @@ fn e2e_acp_model_info_no_dedup_on_model_field() {
     assert!(
         acp_models.contains_key(&acp::ModelId::new("acme-grok")),
         "user entry should be addressable by map key"
-    );
-}
-#[test]
-fn e2e_enterprise_endpoints_plus_partial_model_override() {
-    let dm = crate::models::default_model();
-    let (_, models) = resolve_models_from_toml(
-        &format!(
-            r#"
-            [endpoints]
-            cli_chat_proxy_base_url = "https://enterprise-proxy.acme.com/v1"
-            xai_api_base_url = "https://enterprise-api.acme.com/v1"
-
-            [model."{dm}"]
-            api_key = "acme-api-key"
-            "#,
-        ),
-        None,
-    );
-    let model = models.get(dm).expect("model should exist");
-    assert_eq!(
-        model.info.base_url, "https://enterprise-proxy.acme.com/v1",
-        "base_url must inherit from [endpoints], not stale default"
-    );
-    assert_eq!(model.api_key.as_deref(), Some("acme-api-key"));
-    assert_eq!(
-        model.api_base_url.as_deref(),
-        Some("https://enterprise-api.acme.com/v1"),
-    );
-    let sampling = resolve_sampling(model, Some("session-token"));
-    assert_eq!(
-        sampling.api_key.as_deref(),
-        Some("acme-api-key"),
-        "model's own api_key must beat session token"
-    );
-    assert_eq!(
-        sampling.base_url, "https://enterprise-proxy.acme.com/v1",
-        "sampling must route to enterprise proxy"
-    );
-}
-#[test]
-fn e2e_enterprise_endpoints_only_no_model_override() {
-    let (_, models) = resolve_models_from_toml(
-        r#"
-            [endpoints]
-            cli_chat_proxy_base_url = "https://enterprise-proxy.acme.com/v1"
-            xai_api_base_url = "https://enterprise-api.acme.com/v1"
-            "#,
-        None,
-    );
-    let model = models
-        .get(crate::models::default_model())
-        .expect("model should exist");
-    assert_eq!(
-        model.info.base_url, "https://enterprise-proxy.acme.com/v1",
-        "default model should use enterprise cli_chat_proxy_base_url"
-    );
-    assert_eq!(
-        model.api_base_url.as_deref(),
-        Some("https://enterprise-api.acme.com/v1"),
-        "default model should use enterprise xai_api_base_url"
     );
 }
 /// Unset every env var that `EndpointsConfig::default()` reads for endpoints.
@@ -3934,7 +3771,8 @@ fn resolve_title_refresh_defaults_to_turn_summary_but_decouples() {
     unsafe { std::env::remove_var("VKTR_TITLE_REFRESH") };
     unsafe { std::env::remove_var("VKTR_TURN_SUMMARY") };
     let r = Config::default().resolve_title_refresh();
-    assert!(r.value, "title_refresh defaults to turn_summary (on)");
+    // turn_summary is off by default in vktr (each summary would be a separate billed run).
+    assert!(!r.value, "title_refresh defaults to turn_summary (off)");
     let ts_off = Config {
         remote_settings: Some(crate::util::config::RemoteSettings {
             turn_summary: Some(false),
@@ -4386,11 +4224,11 @@ fn resolve_goal_remote_settings_kill_switch_overrides_default_on() {
 }
 #[test]
 #[serial]
-fn background_workflows_default_on_without_affecting_goal() {
+fn background_workflows_default_follows_the_lean_toolset_without_affecting_goal() {
     unsafe { std::env::remove_var("VKTR_WORKFLOWS") };
     let cfg = Config::default();
     let r = cfg.resolve_workflows();
-    assert!(r.value);
+    assert_eq!(r.value, crate::agent::config::full_toolset());
     assert_eq!(r.source, ConfigSource::Default);
     assert!(cfg.resolve_goal().value);
 }
@@ -6901,7 +6739,7 @@ fn resolve_runtime_fields_interactive_defaults() {
         laziness_debug_log: None,
         storage_mode: None,
     });
-    assert!(cfg.subagents_enabled);
+    assert_eq!(cfg.subagents_enabled, crate::agent::config::full_toolset());
     assert!(!cfg.respect_gitignore);
     assert!(cfg.managed_mcps_enabled);
     assert!(!cfg.managed_mcp_gateway_tools_enabled);
@@ -7768,22 +7606,6 @@ fn resolve_model_list_inherits_context_window_from_default_when_prefetched_has_f
     );
 }
 #[test]
-fn resolve_model_list_does_not_override_explicitly_set_context_window() {
-    let cfg = Config::default();
-    let dm = crate::models::default_model();
-    let explicit_cw = 65_536;
-    let entry = prefetch_model_entry(dm, explicit_cw, ApiBackend::default());
-    let mut prefetched = IndexMap::new();
-    prefetched.insert(dm.to_owned(), entry);
-    let resolved = resolve_model_list(&cfg, Some(prefetched));
-    let entry = resolved.get(dm).expect("model must exist");
-    assert_eq!(
-        entry.info.context_window.get(),
-        explicit_cw,
-        "explicitly-set context_window must not be overwritten by default"
-    );
-}
-#[test]
 fn resolve_model_list_inherits_agent_type_and_api_backend() {
     let cfg = Config::default();
     let dm = crate::models::default_model();
@@ -7863,34 +7685,6 @@ fn resolve_model_list_prefetch_visibility_matches_auth_and_server_list() {
         .collect();
     assert_eq!(sess.len(), 1);
     assert_eq!(api.len(), 1);
-}
-#[test]
-fn resolve_model_list_keeps_prefetch_only_entries_and_prunes_defaults() {
-    let cfg = Config::default();
-    let dm = crate::models::default_model();
-    let mut p = IndexMap::new();
-    let e = prefetch_model_entry("secret-xyz", 200000, ApiBackend::default());
-    p.insert("secret-xyz".to_string(), e);
-    let resolved = resolve_model_list(&cfg, Some(p));
-    assert!(resolved.contains_key("secret-xyz"));
-    assert!(!resolved.contains_key(dm));
-}
-#[test]
-fn resolve_model_list_prefetch_replaces_bundled_entirely() {
-    let cfg = Config::default();
-    let dm = crate::models::default_model();
-    let mut p = IndexMap::new();
-    let e = prefetch_model_entry("other-model", 500_000, ApiBackend::Responses);
-    p.insert("other-model".to_string(), e);
-    let resolved = resolve_model_list(&cfg, Some(p));
-    assert!(resolved.contains_key("other-model"));
-    assert!(!resolved.contains_key(dm));
-}
-#[test]
-fn resolve_model_list_empty_prefetch_yields_empty_base() {
-    let cfg = Config::default();
-    let resolved = resolve_model_list(&cfg, Some(IndexMap::new()));
-    assert!(resolved.is_empty());
 }
 /// Regression: enterprise managed config overlays env_key on an oauth-only catalog entry.
 /// BYOK must force visibility for API-key users so a base `supported_in_api: false` does not leak into the overlay.
@@ -8210,40 +8004,6 @@ fn mcp_recursive_config_watch_feature_flag_used_when_no_higher_layer() {
     assert!(!r.value);
     assert_eq!(r.source, ConfigSource::Remote);
 }
-#[test]
-#[serial_test::serial(remote_sig_disarm)]
-fn remote_settings_disarm_managed_config_signatures() {
-    let prod = crate::env::PROD_CLI_CHAT_PROXY_BASE_URL;
-    let _env = crate::env::EnvVarGuard::remove("VKTR_CLI_CHAT_PROXY_BASE_URL");
-    xai_grok_config::signed_policy::apply_remote_managed_config_signature_verification(
-        Some(true),
-        true,
-    );
-    assert!(xai_grok_config::signed_policy::verification_active());
-    let settings = crate::util::config::RemoteSettings {
-        managed_config_signature_verification: Some(false),
-        ..Default::default()
-    };
-    apply_remote_settings_side_effects(Some(&settings), prod);
-    assert!(!xai_grok_config::signed_policy::verification_active());
-    let settings = crate::util::config::RemoteSettings {
-        managed_config_signature_verification: Some(true),
-        ..Default::default()
-    };
-    apply_remote_settings_side_effects(Some(&settings), prod);
-    assert!(xai_grok_config::signed_policy::verification_active());
-    xai_grok_config::signed_policy::apply_remote_managed_config_signature_verification(
-        Some(false),
-        true,
-    );
-    apply_remote_settings_side_effects(None, prod);
-    assert!(!xai_grok_config::signed_policy::verification_active());
-    xai_grok_config::signed_policy::apply_remote_managed_config_signature_verification(
-        Some(true),
-        true,
-    );
-    assert!(xai_grok_config::signed_policy::verification_active());
-}
 /// A pass with no payload must keep the last applied policy (a cancelled
 /// first bootstrap followed by an offline fallback pass must not wipe it);
 /// a real payload still rewrites the caches, clearing omitted fields.
@@ -8324,42 +8084,6 @@ fn sampling_config_compresses_only_toward_the_advertising_proxy() {
         "a payload without the advertisement disarms compression; the env cannot force it on"
     );
 }
-/// Keyed path: prod proxy origin can disarm; env override cannot.
-#[test]
-#[serial_test::serial(remote_sig_disarm)]
-fn remote_settings_disarm_requires_prod_proxy_when_keys_embedded() {
-    let prod = crate::env::PROD_CLI_CHAT_PROXY_BASE_URL;
-    xai_grok_config::signed_policy::apply_remote_managed_config_signature_verification(
-        Some(true),
-        true,
-    );
-    assert!(xai_grok_config::signed_policy::verification_active());
-    let settings = crate::util::config::RemoteSettings {
-        managed_config_signature_verification: Some(false),
-        ..Default::default()
-    };
-    let env = crate::env::EnvVarGuard::remove("VKTR_CLI_CHAT_PROXY_BASE_URL");
-    apply_remote_settings_side_effects(Some(&settings), prod);
-    assert!(
-        !xai_grok_config::signed_policy::verification_active(),
-        "prod proxy origin must allow disarm when keys are embedded"
-    );
-    xai_grok_config::signed_policy::apply_remote_managed_config_signature_verification(
-        Some(true),
-        true,
-    );
-    assert!(xai_grok_config::signed_policy::verification_active());
-    env.set_value("https://attacker.example/v1");
-    apply_remote_settings_side_effects(Some(&settings), prod);
-    assert!(
-        xai_grok_config::signed_policy::verification_active(),
-        "env-overridden proxy must not be able to disarm keyed verification"
-    );
-    xai_grok_config::signed_policy::apply_remote_managed_config_signature_verification(
-        Some(true),
-        true,
-    );
-}
 #[test]
 fn a_status_line_the_parser_could_not_read_in_full_reaches_grok_inspect() {
     use super::super::config_model_override_parse::{ConfigWarningKind, WarningTarget};
@@ -8434,4 +8158,31 @@ async fn process_key_from_model_env_key() {
             .as_deref(),
         Some(TOKEN)
     );
+}
+
+#[test]
+fn the_lean_toolset_denies_the_heavy_upstream_tools_unless_asked_for() {
+    if crate::agent::config::full_toolset() {
+        return;
+    }
+    let mut def = AgentDefinition::default_grok_build();
+    CliAgentOverrides::default().apply_to_definition(&mut def);
+    for tool in [
+        "scheduler_create",
+        "scheduler_delete",
+        "scheduler_list",
+        "monitor",
+        "update_goal",
+    ] {
+        assert!(def.disallowed_tools.iter().any(|t| t == tool), "{tool}");
+    }
+    // An explicit --tools list naming one keeps it.
+    let mut def = AgentDefinition::default_grok_build();
+    CliAgentOverrides {
+        tools: Some(vec!["monitor".to_owned(), "read_file".to_owned()]),
+        ..Default::default()
+    }
+    .apply_to_definition(&mut def);
+    assert!(!def.disallowed_tools.iter().any(|t| t == "monitor"));
+    assert!(def.disallowed_tools.iter().any(|t| t == "scheduler_create"));
 }

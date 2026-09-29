@@ -6,6 +6,8 @@ edition.workspace = true
 description = "Actor-based sampling/inference layer for xAI vktr (HTTP streaming + retry, no shell coupling)"
 
 [dependencies]
+# vktr: the Viktor thread map lives under ~/.vktr
+xai-dirs = { workspace = true }
 # Internal
 xai-grok-auth = { workspace = true }
 xai-grok-extra-ca = { workspace = true }

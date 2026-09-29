@@ -1656,7 +1656,7 @@ impl RawAppearanceConfig {
         let pager_path = crate::util::display_user_grok_path("pager.toml");
         let header = format!(
             "\
-# Grok Pager Appearance Configuration ({pager_path})
+# vktr Appearance Configuration ({pager_path})
 # Every value below is a commented-out built-in default: uncomment a line and
 # save to override it. Values left commented track future default changes.
 # Delete the file to regenerate this template.

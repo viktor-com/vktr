@@ -1,0 +1,336 @@
+# Release binaries are assembled here, never on a developer machine. Every run goes through the
+# same stages; only the last one differs:
+#
+#   build    scripts/dist.sh on one runner per target: Linux x86_64 and aarch64 (cargo-zigbuild,
+#            glibc 2.28 floor), macOS aarch64 and x86_64 (native, macOS 11 floor).
+#   stage    uploads all tarballs and .sha256 files, with the CHANGELOG section as notes, to a
+#            *draft* release (invisible to install.sh and to anyone without push access).
+#   verify   on each target OS, installs vktr from that draft with install.sh and runs
+#            scripts/smoke-release.sh; on Linux also inside RHEL 8 (Rocky Linux 8, glibc 2.28).
+#   publish  tag push `v<version>`: turns the verified draft into the release (latest, unless the
+#            version is -rc/-beta/-alpha) and installs it once more as a user would.
+#            Manual run (workflow_dispatch): the full dry run. The draft is published as a
+#            prerelease named dryrun-<run id>, installed back, and deleted with its tag.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  DOTSLASH_VERSION: v0.5.7
+  ZIGLANG_VERSION: 0.16.0
+  CARGO_ZIGBUILD_VERSION: 0.23.4
+  # Every target a release must carry; stage refuses to publish a release missing one.
+  RELEASE_TARGETS: >-
+    x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu aarch64-apple-darwin
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-24.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04 }
+          - { target: aarch64-apple-darwin, os: macos-15 }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check the tag matches the crate version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version="$(grep -m1 '^version' crates/codegen/xai-grok-pager-bin/Cargo.toml | sed -E 's/version *= *"([^"]+)"/\1/')"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match crate version v${version}"
+            exit 1
+          fi
+
+      # One target's LTO build needs ~10 GB of target/; the stock Linux image leaves too little room.
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Install Rust (rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: actions/setup-python@v7
+        if: runner.os == 'Linux'
+        with:
+          python-version: "3.12"
+
+      - name: Install cargo-zigbuild and zig
+        if: runner.os == 'Linux'
+        run: python -m pip install "ziglang==${ZIGLANG_VERSION}" "cargo-zigbuild==${CARGO_ZIGBUILD_VERSION}"
+
+      - name: Install DotSlash (hermetic protoc)
+        run: |
+          case "${RUNNER_OS}" in
+            Linux) asset="dotslash-ubuntu-22.04.x86_64.${DOTSLASH_VERSION}.tar.gz" ;;
+            macOS) asset="dotslash-macos.${DOTSLASH_VERSION}.tar.gz" ;;
+          esac
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/facebook/dotslash/releases/download/${DOTSLASH_VERSION}/${asset}" \
+            | tar -xz -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Build tarball
+        env:
+          VKTR_DIST_TARGET: ${{ matrix.target }}
+        run: scripts/dist.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: vktr-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  stage:
+    name: stage draft release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.names.outputs.tag }}
+      version: ${{ steps.names.outputs.version }}
+      commit: ${{ steps.names.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Resolve version and release name
+        id: names
+        run: |
+          version="$(grep -m1 '^version' crates/codegen/xai-grok-pager-bin/Cargo.toml | sed -E 's/version *= *"([^"]+)"/\1/')"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then tag="${GITHUB_REF_NAME}"; else tag="dryrun-${GITHUB_RUN_ID}"; fi
+          { echo "version=${version}"; echo "tag=${tag}"; echo "commit=${GITHUB_SHA::12}"; } | tee -a "$GITHUB_OUTPUT"
+
+      - name: Check every target is present and intact
+        working-directory: dist
+        env:
+          VERSION: ${{ steps.names.outputs.version }}
+          COMMIT: ${{ steps.names.outputs.commit }}
+        run: |
+          expected=""
+          for t in ${RELEASE_TARGETS}; do
+            expected+="vktr-${VERSION}-${t}.tar.gz"$'\n'"vktr-${VERSION}-${t}.tar.gz.sha256"$'\n'
+          done
+          expected="$(printf '%s' "${expected}" | sort)"
+          actual="$(find . -maxdepth 1 -type f -printf '%f\n' | sort)"
+          if [ "${expected}" != "${actual}" ]; then
+            echo "::error::built assets differ from RELEASE_TARGETS"
+            diff <(echo "${expected}") <(echo "${actual}") || true
+            exit 1
+          fi
+          sha256sum -c ./*.sha256
+          for t in ${RELEASE_TARGETS}; do
+            name="vktr-${VERSION}-${t}"
+            want="$(printf '%s\n' "${name}/" "${name}/"{vktr,LICENSE,NOTICE,THIRD-PARTY-NOTICES,README.md,CHANGELOG.md,VERSION} | sort)"
+            got="$(tar -tzf "${name}.tar.gz" | sort)"
+            if [ "${want}" != "${got}" ]; then
+              echo "::error::${name}.tar.gz has unexpected contents"
+              diff <(echo "${want}") <(echo "${got}") || true
+              exit 1
+            fi
+            stamp="$(tar -xzf "${name}.tar.gz" -O "${name}/VERSION")"
+            if [ "${stamp}" != "vktr ${VERSION} (${COMMIT})" ]; then
+              echo "::error::${name} is stamped '${stamp}', not built from ${COMMIT}"
+              exit 1
+            fi
+          done
+
+      - name: Release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ steps.names.outputs.version }}
+        run: |
+          awk -v v="${VERSION}" '
+            /^## / { if (on) exit; if (index($0, "## " v) == 1) { on = 1; next } }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::error::CHANGELOG.md has no section for ${VERSION}"
+            exit 1
+          fi
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.names.outputs.tag }}
+          VERSION: ${{ steps.names.outputs.version }}
+        run: |
+          # A draft never creates its tag and is never "latest", so install.sh cannot see it.
+          flags=(--draft)
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then flags+=(--verify-tag); else flags+=(--target "${GITHUB_SHA}"); fi
+          gh release create "${TAG}" dist/*.tar.gz dist/*.sha256 \
+            --repo "${GITHUB_REPOSITORY}" --title "vktr ${VERSION}" --notes-file notes.md "${flags[@]}"
+
+      - name: Check the uploaded assets round-trip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.names.outputs.tag }}
+        run: |
+          expected="$(find dist -maxdepth 1 -type f -printf '%f\n' | sort)"
+          actual="$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets -q '.assets[].name' | sort)"
+          if [ "${expected}" != "${actual}" ]; then
+            echo "::error::release assets differ from the built artifacts"
+            diff <(echo "${expected}") <(echo "${actual}") || true
+            exit 1
+          fi
+          gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" -D check
+          (cd check && sha256sum -c ./*.sha256)
+
+  verify:
+    name: verify on ${{ matrix.name }}
+    needs: stage
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    # Draft releases are visible only to tokens with push access.
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Linux x86_64, os: ubuntu-24.04, target: x86_64-unknown-linux-gnu }
+          - { name: Linux aarch64, os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+          - { name: macOS Apple Silicon, os: macos-15, target: aarch64-apple-darwin }
+    env:
+      TAG: ${{ needs.stage.outputs.tag }}
+      WANT: vktr ${{ needs.stage.outputs.version }} (${{ needs.stage.outputs.commit }})
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: GNU timeout (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install coreutils
+          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Install from the draft release with install.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VKTR_INSTALL_DIR="$PWD/target/installed" VKTR_BIN_DIR="$RUNNER_TEMP/bin" \
+            sh install.sh --version "${TAG}" 2>&1 | tee install.log
+          grep -q "Checksum verified" install.log
+          grep -q -- "-${{ matrix.target }}.tar.gz" install.log \
+            || grep -q "for ${{ matrix.target }}" install.log
+          "$RUNNER_TEMP/bin/vktr" --version
+
+      - name: Smoke tests on ${{ matrix.name }}
+        run: scripts/smoke-release.sh target/installed/vktr "${WANT}"
+
+      # The oldest Linux the README promises: RHEL 8's glibc 2.28, same arch as the runner.
+      - name: Smoke tests on Rocky Linux 8 (glibc 2.28)
+        if: runner.os == 'Linux'
+        run: |
+          # Same path inside the container: install.sh left absolute symlinks in target/installed.
+          docker run --rm -e WANT -v "$PWD:$PWD" -w "$PWD" rockylinux/rockylinux:8 bash -euc '
+            dnf install -y -q python3.11 file procps-ng git findutils diffutils which >/dev/null
+            ln -sf /usr/bin/python3.11 /usr/local/bin/python3
+            ldd --version | head -1
+            useradd -m tester && chown -R tester "$PWD"
+            su tester -c "scripts/smoke-release.sh target/installed/vktr \"$WANT\""
+          '
+          sudo chown -R "$(id -u):$(id -g)" .
+
+  publish:
+    name: ${{ github.ref_type == 'tag' && 'publish release' || 'dry run - publish and discard' }}
+    needs: [stage, verify]
+    # Also after a failed stage, so a dry-run draft it already created is still deleted.
+    if: always() && needs.stage.outputs.tag != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.stage.outputs.tag }}
+      WANT: vktr ${{ needs.stage.outputs.version }} (${{ needs.stage.outputs.commit }})
+      VERIFIED: ${{ needs.verify.result == 'success' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Refuse to publish an unverified release
+        if: github.ref_type == 'tag' && env.VERIFIED != 'true'
+        run: |
+          echo "::error::verification failed; ${TAG} stays a draft (fix, delete the draft, and re-run)"
+          exit 1
+
+      - name: Publish the release
+        if: github.ref_type == 'tag' || env.VERIFIED == 'true'
+        run: |
+          flags=(--draft=false)
+          case "${TAG}" in
+            dryrun-*|*-rc*|*-beta*|*-alpha*) flags+=(--prerelease) ;;  # never becomes "latest"
+            *) flags+=(--latest) ;;
+          esac
+          gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" "${flags[@]}"
+          gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json tagName,isDraft,isPrerelease,url
+
+      - name: Install the published release as a user would
+        if: github.ref_type == 'tag' || env.VERIFIED == 'true'
+        run: |
+          VKTR_INSTALL_DIR="$RUNNER_TEMP/vktr" VKTR_BIN_DIR="$RUNNER_TEMP/bin" sh install.sh --version "${TAG}"
+          got="$("$RUNNER_TEMP/bin/vktr" --version)"
+          echo "${got}"
+          [ "${got}" = "${WANT}" ] || { echo "::error::installed ${got}, expected ${WANT}"; exit 1; }
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [[ "${TAG}" != *-rc* && "${TAG}" != *-beta* && "${TAG}" != *-alpha* ]]; then
+            latest="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" -q .tag_name)"
+            [ "${latest}" = "${TAG}" ] || { echo "::error::latest is ${latest}, not ${TAG}"; exit 1; }
+          else
+            latest="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" -q .tag_name 2>/dev/null)" || latest=""
+            [ "${latest}" != "${TAG}" ] || { echo "::error::${TAG} became latest"; exit 1; }
+          fi
+
+      - name: Delete the dry-run release and its tag
+        if: always() && github.ref_type != 'tag'
+        run: |
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release delete "${TAG}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}"
+          fi
+          sleep 5
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 \
+             || gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::dry run left ${TAG} behind"
+            exit 1
+          fi
+
+      - name: Fail the dry run if verification failed
+        if: github.ref_type != 'tag' && env.VERIFIED != 'true'
+        run: |
+          echo "::error::verification failed on at least one target"
+          exit 1

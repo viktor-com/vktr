@@ -522,7 +522,7 @@ impl std::fmt::Display for ProvenanceUpdateError {
             Self::NotConfigured { source } => write!(
                 f,
                 "marketplace source is no longer configured: {source}; \
-                 re-add it with `grok plugin marketplace add` or reinstall the plugin"
+                 re-add it with `vktr plugin marketplace add` or reinstall the plugin"
             ),
         }
     }

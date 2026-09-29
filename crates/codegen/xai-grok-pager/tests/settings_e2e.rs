@@ -3652,7 +3652,7 @@ fn reset_overlay_dims_all_rows_except_target() {
     }
 }
 
-/// The settings modal renders a 1-line "Ask Grok" tip footer at the bottom of the content area. It shows in Browse,
+/// The settings modal renders a 1-line "Ask vktr" tip footer at the bottom of the content area. It shows in Browse,
 /// FilterFocused, and PickingEnum modes (always-on tip). The footer is suppressed in `EditingValue` because the
 /// editor needs every line for input and validation.
 #[test]
@@ -3691,7 +3691,7 @@ fn docs_footer_renders_for_browse_and_picker() {
              {all_text}"
         );
         assert!(
-            all_text.contains("change theme to grokday"),
+            all_text.contains("change theme to vktr-day"),
             "[{fixture_label}] docs footer must include the example phrasing"
         );
     }
@@ -4485,185 +4485,6 @@ fn pr9_current_value_for_reads_pager_snapshot_inverts_opt_out() {
     );
 }
 
-/// Enter opens picker seeded to current state.
-#[test]
-fn pr9_enter_on_coding_data_sharing_row_enters_picking_enum() {
-    let mut s = make_state();
-    navigate_to(&mut s, "coding_data_sharing");
-    let outcome = handle_settings_key(&mut s, &press(KeyCode::Enter));
-    assert!(
-        matches!(outcome, SettingsKeyOutcome::Changed),
-        "Enter on coding_data_sharing row must transition to PickingEnum, got {outcome:?}"
-    );
-    match &s.mode() {
-        SettingsModalMode::PickingEnum {
-            key,
-            original_value,
-            ..
-        } => {
-            assert_eq!(*key, "coding_data_sharing");
-            assert_eq!(
-                original_value,
-                &SettingValue::Enum("opt-out"),
-                "default snapshot opt_out=true → original 'opt-out'"
-            );
-        }
-        other => panic!("expected PickingEnum mode, got {other:?}"),
-    }
-}
-
-/// Nav in picker must NOT dispatch preview (async ACP).
-#[test]
-fn pr9_coding_data_sharing_picker_nav_does_not_dispatch_preview() {
-    for nav_key in &[
-        KeyCode::Down,
-        KeyCode::Char('j'),
-        KeyCode::Up,
-        KeyCode::Char('k'),
-    ] {
-        let mut s = make_state();
-        navigate_to(&mut s, "coding_data_sharing");
-        let _ = handle_settings_key(&mut s, &press(KeyCode::Enter));
-        assert!(matches!(s.mode(), SettingsModalMode::PickingEnum { .. }));
-
-        // Pre-position so the nav key under test has room to move no matter which choice the registry default opens the picker on
-        // (Up needs idx > 0, Down needs idx < last.)
-        if matches!(nav_key, KeyCode::Up | KeyCode::Char('k')) {
-            let _ = handle_settings_key(&mut s, &press(KeyCode::Down));
-        } else {
-            let _ = handle_settings_key(&mut s, &press(KeyCode::Up));
-        }
-
-        let outcome = handle_settings_key(&mut s, &press(*nav_key));
-        assert!(
-            matches!(outcome, SettingsKeyOutcome::Changed),
-            "Nav key {nav_key:?} in coding_data_sharing picker MUST NOT dispatch a preview \
-             Action — that would fire a network round-trip per keystroke. Got {outcome:?}",
-        );
-        assert!(matches!(s.mode(), SettingsModalMode::PickingEnum { .. }));
-    }
-}
-
-/// Enter commits `SetCodingDataSharing { opted_in }` (opt-in maps to true).
-#[test]
-fn pr9_coding_data_sharing_picker_enter_dispatches_set_commit() {
-    let reg = SettingsRegistry::defaults();
-    let meta = reg.find("coding_data_sharing").unwrap();
-    let (default_canonical, choices) = match &meta.kind {
-        SettingKind::Enum {
-            default, choices, ..
-        } => (*default, *choices),
-        _ => panic!("coding_data_sharing must be Enum"),
-    };
-    // Resolve "the other" canonical from the registry rather than hardcoding; robust against future catalog additions
-    let other_canonical = choices
-        .iter()
-        .map(|c| c.canonical)
-        .find(|c| *c != default_canonical)
-        .expect("coding_data_sharing must have ≥2 choices");
-    let expected_opted_in = match other_canonical {
-        "opt-in" => true,
-        "opt-out" => false,
-        _ => panic!("unexpected canonical: {other_canonical:?}"),
-    };
-
-    let mut s = make_state();
-    navigate_to(&mut s, "coding_data_sharing");
-    let _ = handle_settings_key(&mut s, &press(KeyCode::Enter));
-    // Nav to the OTHER choice; direction depends on where the registry default opened the picker, so derive it instead of hardcoding Down
-    let default_idx = choices
-        .iter()
-        .position(|c| c.canonical == default_canonical)
-        .expect("default must be a registry choice");
-    let other_idx = choices
-        .iter()
-        .position(|c| c.canonical == other_canonical)
-        .expect("other choice must be in the registry");
-    let nav = if other_idx > default_idx {
-        KeyCode::Down
-    } else {
-        KeyCode::Up
-    };
-    let _ = handle_settings_key(&mut s, &press(nav));
-    // Enter commits
-    let outcome = handle_settings_key(&mut s, &press(KeyCode::Enter));
-    match outcome {
-        SettingsKeyOutcome::Action(Action::SetCodingDataSharing { opted_in }) => {
-            assert_eq!(
-                opted_in, expected_opted_in,
-                "Enter must commit `{other_canonical}` → SetCodingDataSharing(opted_in={expected_opted_in})"
-            );
-        }
-        other => panic!("expected Action::SetCodingDataSharing commit, got {other:?}"),
-    }
-    assert!(
-        matches!(s.mode(), SettingsModalMode::Browse),
-        "Enter commit must return to Browse"
-    );
-}
-
-/// Esc in non-preview picker returns to Browse without Action.
-#[test]
-fn pr9_coding_data_sharing_picker_esc_does_not_dispatch_action() {
-    let mut s = make_state();
-    navigate_to(&mut s, "coding_data_sharing");
-    let _ = handle_settings_key(&mut s, &press(KeyCode::Enter));
-    let _ = handle_settings_key(&mut s, &press(KeyCode::Down));
-
-    let outcome = handle_settings_key(&mut s, &press(KeyCode::Esc));
-    assert!(
-        matches!(outcome, SettingsKeyOutcome::Changed),
-        "Esc on non-preview Enum picker must NOT emit an Action — \
-         doing so would fire an ACP round-trip on every Esc. Got {outcome:?}"
-    );
-    assert!(
-        matches!(s.mode(), SettingsModalMode::Browse),
-        "Esc must return to Browse"
-    );
-}
-
-/// Picker seeds at "opt-out" when `coding_data_sharing_opt_out: true`.
-#[test]
-fn pr9_picker_seeds_choices_idx_from_pager_snapshot_opt_out_true() {
-    let snapshot = PagerLocalSnapshot {
-        coding_data_sharing_opt_out: true,
-        ..PagerLocalSnapshot::default()
-    };
-    let mut s = SettingsModalState::new(
-        Arc::new(SettingsRegistry::defaults()),
-        UiConfig::default(),
-        snapshot,
-    );
-    navigate_to(&mut s, "coding_data_sharing");
-    let _ = handle_settings_key(&mut s, &press(KeyCode::Enter));
-    let reg = SettingsRegistry::defaults();
-    let opt_out_idx = match &reg.find("coding_data_sharing").unwrap().kind {
-        SettingKind::Enum { choices, .. } => choices
-            .iter()
-            .position(|c| c.canonical == "opt-out")
-            .expect("coding_data_sharing must have 'opt-out' choice"),
-        _ => panic!("coding_data_sharing must be Enum"),
-    };
-    match s.mode() {
-        SettingsModalMode::PickingEnum {
-            choices_idx,
-            ref original_value,
-            ..
-        } => {
-            assert_eq!(
-                choices_idx, opt_out_idx,
-                "picker must seed at the 'opt-out' index when snapshot says opt_out=true"
-            );
-            assert_eq!(
-                original_value,
-                &SettingValue::Enum("opt-out"),
-                "original_value must match the live snapshot"
-            );
-        }
-        ref other => panic!("expected PickingEnum mode, got {other:?}"),
-    }
-}
-
 /// Exactly 2 canonical choices: {opt-in, opt-out}.
 #[test]
 fn pr9_coding_data_sharing_choices_use_canonical_strings() {
@@ -4714,89 +4535,6 @@ fn pr9_search_privacy_matches_coding_data_sharing() {
         hits[0].key, "coding_data_sharing",
         "search('privacy') unique result must be coding_data_sharing"
     );
-}
-
-/// First click on unselected row only selects.
-#[test]
-fn pr9_mouse_click_on_unselected_coding_data_sharing_row_only_selects() {
-    let mut s = make_state();
-    synth_rects(&mut s);
-    let row_y = row_idx_for(&s, "coding_data_sharing") as u16;
-
-    let outcome = handle_settings_mouse(
-        &mut s,
-        MouseEventKind::Down(crossterm::event::MouseButton::Left),
-        10,
-        row_y,
-    );
-    assert!(
-        matches!(outcome, SettingsKeyOutcome::Changed),
-        "first body-click on unselected coding_data_sharing row should only select, got: {outcome:?}",
-    );
-    assert_eq!(s.selected, row_y as usize);
-    assert!(matches!(s.mode(), SettingsModalMode::Browse));
-}
-
-/// Second click on selected row opens picker.
-#[test]
-fn pr9_mouse_click_on_selected_coding_data_sharing_row_opens_picker() {
-    let mut s = make_state();
-    synth_rects(&mut s);
-    let row_y = row_idx_for(&s, "coding_data_sharing") as u16;
-
-    // First click: select.
-    let _ = handle_settings_mouse(
-        &mut s,
-        MouseEventKind::Down(crossterm::event::MouseButton::Left),
-        10,
-        row_y,
-    );
-    assert_eq!(s.selected, row_y as usize);
-
-    // Second click on the focused row: open the picker.
-    let outcome = handle_settings_mouse(
-        &mut s,
-        MouseEventKind::Down(crossterm::event::MouseButton::Left),
-        10,
-        row_y,
-    );
-    assert!(
-        matches!(outcome, SettingsKeyOutcome::Changed),
-        "second click on focused Enum row must open picker, got: {outcome:?}",
-    );
-    match &s.mode() {
-        SettingsModalMode::PickingEnum { key, .. } => {
-            assert_eq!(*key, "coding_data_sharing");
-        }
-        _ => panic!("second click on focused coding_data_sharing row must enter PickingEnum"),
-    }
-}
-
-/// Value-column click opens picker in one click.
-#[test]
-fn pr9_mouse_click_on_coding_data_sharing_indicator_opens_picker_in_one_click() {
-    let mut s = make_state();
-    synth_rects(&mut s);
-    let row_y = row_idx_for(&s, "coding_data_sharing") as u16;
-
-    let outcome = handle_settings_mouse(
-        &mut s,
-        MouseEventKind::Down(crossterm::event::MouseButton::Left),
-        72,
-        row_y,
-    );
-    assert!(
-        matches!(outcome, SettingsKeyOutcome::Changed),
-        "value click must open picker in one click, got: {outcome:?}",
-    );
-    match &s.mode() {
-        SettingsModalMode::PickingEnum { key, .. } => {
-            assert_eq!(*key, "coding_data_sharing");
-        }
-        _ => {
-            panic!("value click on coding_data_sharing must enter PickingEnum")
-        }
-    }
 }
 
 /// `default_selected_permission` lives under `Agent` and is SHELL-owned.

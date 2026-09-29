@@ -107,6 +107,17 @@ impl Theme {
             md_code_bg: Color::Reset,
             md_text: Color::Reset,
             link_fg: Color::Blue,
+
+            brand: Color::Magenta,
+            brand_deep: Color::Magenta,
+            brand_glint: Color::White,
+            brand_gradient: [
+                Color::Blue,
+                Color::Magenta,
+                Color::Magenta,
+                Color::LightRed,
+                Color::Yellow,
+            ],
         }
     }
 

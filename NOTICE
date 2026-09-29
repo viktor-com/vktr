@@ -1,0 +1,17 @@
+vktr
+Copyright 2026 viktor.com
+
+This product is a modified fork of Grok Build
+(https://github.com/xai-org/grok-build), Copyright 2023-2026 SpaceXAI,
+licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Vendored from upstream commit 9bb727ccdff0a793ee73bcde4e2e09cbef6b5387
+(upstream SOURCE_REV, 2026-09-19). All files under crates/, third_party/,
+prod/ and bin/ originate from that tree unless stated otherwise. The
+modifications made in this fork are listed in CHANGELOG.md, and each change
+is recorded in the git history of this repository.
+
+"Grok" and "xAI" are trademarks of their respective owners. This fork is
+not affiliated with or endorsed by xAI, and is not distributed under those
+names. Third-party notices for bundled dependencies are in
+THIRD-PARTY-NOTICES.

@@ -14,10 +14,11 @@ const TRACE_BUNDLE_FILENAME: &str = "trace_export.tar.gz";
 
 #[derive(Debug, clap::Args, Clone)]
 pub struct TraceArgs {
-    /// Session ID to export/upload
+    /// Session ID to export
     pub session_id: String,
-    /// Save locally only, skip remote upload
-    #[arg(long)]
+    /// Kept for compatibility: vktr always saves traces locally. Upstream uploaded them to xAI's
+    /// trace service, which vktr has no counterpart for, so nothing leaves the machine.
+    #[arg(long, hide = true)]
     pub local: bool,
     /// Output path (default: $VKTR_HOME/trace-exports/<session-id>.tar.gz)
     #[arg(short, long)]
@@ -53,32 +54,28 @@ pub async fn run(args: TraceArgs, agent_config: &AgentConfig) -> Result<()> {
         eprintln!("Found session at: {}", session_dir.display());
     }
 
-    if args.local {
-        return run_export(&args, &session_dir, agent_config, None).await;
-    }
+    // vktr has no trace service, so a trace is always exported locally (see `TraceArgs::local`);
+    // upstream's upload path stays below for diffs, unreachable from here.
+    let _ = args.local;
+    run_export(&args, &session_dir, agent_config, None).await
+}
 
+#[allow(dead_code)]
+async fn run_upstream_upload(
+    args: &TraceArgs,
+    session_dir: &Path,
+    agent_config: &AgentConfig,
+) -> Result<()> {
     if !agent_config.is_trace_upload_enabled() {
-        tracing::warn!(
-            session_id = %args.session_id,
-            "trace_cmd: trace uploads disabled in config"
-        );
-        if !args.json {
-            eprintln!(
-                "Trace uploads disabled. Set [telemetry] trace_upload = true in {}",
-                crate::util::display_user_grok_path(xai_grok_config::USER_CONFIG_FILENAME)
-            );
-            eprintln!("Falling back to local export.");
-        }
         return run_export(
-            &args,
-            &session_dir,
+            args,
+            session_dir,
             agent_config,
             Some("trace_upload_disabled"),
         )
         .await;
     }
-
-    run_upload(&args, &session_dir, agent_config).await
+    run_upload(args, session_dir, agent_config).await
 }
 
 pub fn build_session_tar(
@@ -452,7 +449,7 @@ async fn run_upload(
         UploadGate::NoCredentials => {
             if !json {
                 eprintln!(
-                    "No upload credentials for this account (run `grok login` or set a deployment \
+                    "No upload credentials for this account (run `vktr login` or set a deployment \
                      key); exporting locally."
                 );
             }
@@ -631,7 +628,7 @@ impl UploadAttempt<'_> {
             eprintln!("Trace upload failed: {error}");
             eprintln!("  Bundle: {}", export_path.display());
             eprintln!("  Log:    {}", log_path.display());
-            eprintln!("  Retry:  grok trace {}", self.session_id);
+            eprintln!("  Retry:  vktr trace {}", self.session_id);
             println!("{}", export_path.display());
         }
 
@@ -646,7 +643,7 @@ impl UploadAttempt<'_> {
         let _ = writeln!(log, "Trace upload debug log");
         let _ = writeln!(log, "======================");
         let _ = writeln!(log, "Timestamp:    {}", chrono::Utc::now().to_rfc3339());
-        let _ = writeln!(log, "Grok version: {}", xai_grok_version::full_version());
+        let _ = writeln!(log, "vktr version: {}", xai_grok_version::full_version());
         let _ = writeln!(
             log,
             "OS:           {} {}",

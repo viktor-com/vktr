@@ -785,6 +785,14 @@ fn tick_demand_welcome_is_slow_unless_loading() {
     app.session_picker_content_loading = true;
     assert_eq!(app.tick_demand(), TickDemand::Fast);
 }
+/// Once the wordmark settles, an idle welcome screen stops ticking; a pending toast keeps it ticking until it expires.
+#[test]
+fn welcome_parks_once_the_wordmark_settles() {
+    use crate::app::app_view::welcome_tick_demand;
+    assert_eq!(welcome_tick_demand(true, false), TickDemand::Slow);
+    assert_eq!(welcome_tick_demand(false, true), TickDemand::Slow);
+    assert_eq!(welcome_tick_demand(false, false), TickDemand::None);
+}
 /// An open modal session picker that is still fetching keeps fast ticks alive on an otherwise-idle agent (its loading spinner must animate).
 /// That holds even after the fast foreign scan lands rows the default vktr filter hides; once the native list settles the demand parks again.
 #[test]

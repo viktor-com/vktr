@@ -643,6 +643,17 @@ impl acp::Agent for MvpAgent {
                     );
                 }
                 let mut sampling_config = self.sampling_config.borrow_mut();
+                // A key pasted into vktr's sign-in screen arrives here, already verified and saved.
+                if let Some(key) = arguments
+                    .meta
+                    .as_ref()
+                    .and_then(|m| m.get("vktr_api_key"))
+                    .and_then(|v| v.as_str())
+                    .filter(|k| !k.trim().is_empty())
+                {
+                    xai_grok_login::auth_method::set_signed_in_api_key(Some(key.to_owned()));
+                    sampling_config.api_key = Some(key.trim().to_owned());
+                }
                 if sampling_config.api_key.is_none() {
                     if let Ok(api_key) = auth_method::read_xai_api_key_env() {
                         sampling_config.api_key = Some(api_key.clone());
@@ -667,7 +678,7 @@ impl acp::Agent for MvpAgent {
                         return Err(
                             acp::Error::auth_required()
                                 .data(
-                                    "Set XAI_API_KEY or add api_key/env_key to config.toml.",
+                                    "Set VIKTOR_API_KEY or run `vktr login`.",
                                 ),
                         );
                     }

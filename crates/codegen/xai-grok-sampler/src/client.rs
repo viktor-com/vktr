@@ -45,10 +45,10 @@ use xai_grok_auth::bearer_suffix;
 pub use xai_grok_sampling_types::ApiBackend;
 
 /// Process-level fallback for the `x-grok-client-identifier` header.
-const DEFAULT_CLIENT_IDENTIFIER: &str = "grok-shell";
+const DEFAULT_CLIENT_IDENTIFIER: &str = "vktr";
 
 /// Product identifier baked into User-Agent strings.
-const AGENT_PRODUCT: &str = "grok-shell";
+const AGENT_PRODUCT: &str = "vktr";
 const ANTHROPIC_DEFAULT_MAX_TOKENS: u32 = 128_000;
 
 /// Per-request `x-grok-*` headers. Optional fields are skipped when empty/`None`.
@@ -65,8 +65,49 @@ struct GrokRequestHeaders<'a> {
     user_id: Option<&'a str>,
 }
 
+/// xAI's chat proxy protocol headers (`x-grok-*`, `x-xai-*`, proxy auth echoes). vktr talks to Viktor and to
+/// local OpenAI-compatible backends, none of which read them, and they disclose session, agent and user
+/// ids to whatever endpoint is configured. They are sent only with `VKTR_XAI_PROTOCOL_HEADERS=1`.
+pub(crate) fn xai_protocol_headers_enabled() -> bool {
+    std::env::var("VKTR_XAI_PROTOCOL_HEADERS")
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn is_xai_protocol_header(name: &str) -> bool {
+    name.starts_with("x-grok-")
+        || name.starts_with("x-xai-")
+        || matches!(
+            name,
+            "x-authenticateresponse" | "x-compaction-at" | "x-userid" | "x-teamid"
+        )
+}
+
+/// Remove the xAI proxy protocol headers unless they were explicitly enabled.
+pub(crate) fn strip_xai_protocol_headers(headers: &mut HeaderMap) {
+    if xai_protocol_headers_enabled() {
+        return;
+    }
+    let doomed: Vec<HeaderName> = headers
+        .keys()
+        .filter(|name| is_xai_protocol_header(name.as_str()))
+        .cloned()
+        .collect();
+    for name in doomed {
+        headers.remove(name);
+    }
+}
+
 impl GrokRequestHeaders<'_> {
     fn apply(&self, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        if !xai_protocol_headers_enabled() {
+            return builder;
+        }
         let mut b = builder
             .header("x-grok-conv-id", self.conv_id)
             .header("x-grok-req-id", self.req_id)
@@ -458,7 +499,12 @@ pub fn user_agent_string_for(origin: &OriginClientInfo) -> String {
     let agent_version = agent_version();
     let platform = PlatformInfo::current();
 
-    if origin.product == AGENT_PRODUCT && origin.version.as_deref() == Some(agent_version.as_str())
+    // vktr's own front ends call themselves "grok-pager" (TUI) and "grok-shell" (headless)
+    // internally; on the wire they are just vktr.
+    let own_front_end = matches!(origin.product.as_str(), "grok-pager" | "grok-shell");
+    if own_front_end
+        || (origin.product == AGENT_PRODUCT
+            && origin.version.as_deref() == Some(agent_version.as_str()))
     {
         return format!(
             "{}/{} ({}; {})",
@@ -603,6 +649,8 @@ impl SamplingClient {
                 );
             }
         }
+
+        strip_xai_protocol_headers(&mut headers);
 
         // Always set User-Agent: per-session origin if available, else fallback.
         {
@@ -986,6 +1034,7 @@ impl SamplingClient {
             tracing::error!("Failed to build HTTP request: {}", e);
             SamplingError::Http(e)
         })?;
+        strip_xai_protocol_headers(request.headers_mut());
         if !request.headers().contains_key(CONTENT_TYPE) {
             request
                 .headers_mut()
@@ -2023,7 +2072,18 @@ impl SamplingClient {
         // The hosted tools travel as raw JSON, spliced in after serialization by `splice_extra_tool_entries`, whose doc explains why each one does
         let extra_tools = xai_grok_sampling_types::extra_tool_entries(&request.hosted_tools);
 
-        let responses_request: rs::CreateResponse = (&request).into();
+        let mut responses_request: rs::CreateResponse = (&request).into();
+
+        // vktr: resume the Viktor durable thread with only the new items when the history allows it
+        let effective_model = responses_request
+            .model
+            .clone()
+            .unwrap_or_else(|| self.defaults.model.clone());
+        let continuation = crate::viktor_continuation::plan(
+            x_grok_conv_id.as_deref(),
+            &effective_model,
+            &mut responses_request,
+        );
 
         let mut wrapper = CreateResponseWrapper::new(responses_request);
         wrapper.x_grok_conv_id = x_grok_conv_id;
@@ -2039,7 +2099,30 @@ impl SamplingClient {
             wrapper.trace = Some(trace);
         }
 
-        self.create_response_stream(wrapper).await
+        let result = self.create_response_stream(wrapper).await;
+        let Some(pending) = continuation else {
+            return result;
+        };
+        match result {
+            Ok((stream, metadata, doom_loop)) => {
+                let stream = stream
+                    .inspect(move |event| match event {
+                        Ok(rs::ResponseStreamEvent::ResponseCompleted(done)) => {
+                            crate::viktor_continuation::record(&pending, &done.response.id);
+                        }
+                        Ok(rs::ResponseStreamEvent::ResponseFailed(_)) | Err(_) => {
+                            crate::viktor_continuation::forget(pending.conv_id());
+                        }
+                        _ => {}
+                    })
+                    .boxed();
+                Ok((stream, metadata, doom_loop))
+            }
+            Err(err) => {
+                crate::viktor_continuation::forget(pending.conv_id());
+                Err(pending.recover(err))
+            }
+        }
     }
 
     /// Send a conversation request using the Responses API (non-streaming).
@@ -2619,11 +2702,12 @@ mod tests {
                     header(&headers, CONTENT_TYPE),
                     "{route}: the encoding wraps a JSON body"
                 );
-                // cli-chat-proxy rejects a zstd body it cannot attribute from headers.
+                // Upstream's cli-chat-proxy attributes a zstd body from `x-grok-model-override`;
+                // vktr strips every x-grok-* protocol header unless VKTR_XAI_PROTOCOL_HEADERS=1
+                // (see .facts, m5), so by default the header must be absent.
                 assert!(
-                    header(&headers, HeaderName::from_static("x-grok-model-override"))
-                        .is_some_and(|model| !model.is_empty()),
-                    "{route}: a compressed body must carry the model override"
+                    header(&headers, HeaderName::from_static("x-grok-model-override")).is_none(),
+                    "{route}: x-grok-* headers are stripped by default"
                 );
                 assert!(
                     body.len() < input.len() / 10,
@@ -2979,6 +3063,18 @@ mod tests {
     }
 
     #[test]
+    fn vktrs_own_front_ends_are_just_vktr_on_the_wire() {
+        for product in ["grok-pager", "grok-shell"] {
+            let ua = user_agent_string_for(&OriginClientInfo {
+                product: product.to_string(),
+                version: Some("9.9.9".to_string()),
+            });
+            assert!(ua.starts_with(&format!("{AGENT_PRODUCT}/")), "{ua}");
+            assert!(!ua.contains("grok"), "{ua}");
+        }
+    }
+
+    #[test]
     fn user_agent_includes_origin_and_agent_product() {
         let origin = OriginClientInfo {
             product: "my-client".to_string(),
@@ -2997,7 +3093,7 @@ mod tests {
         };
         let ua = user_agent_string_for(&origin);
         // No slash between product and the grok-shell agent product.
-        assert!(ua.starts_with("my-client grok-shell/"));
+        assert!(ua.starts_with("my-client vktr/"));
     }
 
     #[test]

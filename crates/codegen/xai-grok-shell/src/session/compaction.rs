@@ -2141,6 +2141,9 @@ impl SessionActor {
                 reason_override: None,
             });
         }
+        if sampling_cfg.as_ref().is_some_and(viktor_manages_context) {
+            return None;
+        }
         if let Some(trigger_info) = self.should_auto_compact(estimated_total, context_window) {
             tracing::info!(
                 "Pre-sampling auto-compact trigger: model={model}, \
@@ -2450,3 +2453,72 @@ impl SessionActor {
 #[cfg(test)]
 #[path = "compaction_inline_auto_compact_flow_tests.rs"]
 mod inline_auto_compact_flow_tests;
+
+/// Viktor compacts its own threads server-side, and on the Responses backend with continuation vktr
+/// sends only the new items, so the size of vktr's local history never reaches Viktor. A client-side
+/// auto-compaction would cost a billed summary run and replay the summary into a fresh thread, losing
+/// Viktor's context and sandbox state. `/compact` still works on request, and
+/// `VKTR_VIKTOR_CLIENT_COMPACTION=1` restores automatic compaction.
+pub(crate) fn viktor_manages_context(cfg: &xai_grok_sampling_types::SamplingConfig) -> bool {
+    viktor_manages_context_with(
+        &cfg.model,
+        &cfg.api_backend,
+        std::env::var("VKTR_RESPONSES_CONTINUATION").ok().as_deref(),
+        std::env::var("VKTR_VIKTOR_CLIENT_COMPACTION")
+            .ok()
+            .as_deref(),
+    )
+}
+
+fn viktor_manages_context_with(
+    model: &str,
+    backend: &xai_grok_sampling_types::ApiBackend,
+    continuation: Option<&str>,
+    client_compaction: Option<&str>,
+) -> bool {
+    model == "viktor"
+        && matches!(backend, xai_grok_sampling_types::ApiBackend::Responses)
+        && continuation.map(str::trim) != Some("0")
+        && client_compaction.map(str::trim) != Some("1")
+}
+
+#[cfg(test)]
+mod viktor_context_tests {
+    use super::viktor_manages_context_with;
+    use xai_grok_sampling_types::ApiBackend;
+
+    #[test]
+    fn viktor_keeps_its_thread_instead_of_being_compacted_client_side() {
+        assert!(viktor_manages_context_with(
+            "viktor",
+            &ApiBackend::Responses,
+            None,
+            None
+        ));
+        // Stateless protocols and a disabled continuation send the full history: compact as usual.
+        assert!(!viktor_manages_context_with(
+            "viktor",
+            &ApiBackend::ChatCompletions,
+            None,
+            None
+        ));
+        assert!(!viktor_manages_context_with(
+            "viktor",
+            &ApiBackend::Responses,
+            Some("0"),
+            None
+        ));
+        assert!(!viktor_manages_context_with(
+            "viktor",
+            &ApiBackend::Responses,
+            None,
+            Some("1")
+        ));
+        assert!(!viktor_manages_context_with(
+            "qwen3:4b",
+            &ApiBackend::Responses,
+            None,
+            None
+        ));
+    }
+}

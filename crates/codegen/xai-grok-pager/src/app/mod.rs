@@ -1255,9 +1255,9 @@ fn print_exit_resume_hint(info: &ExitInfo, max_width: usize, w: &mut impl Write)
     }
     let _ = writeln!(w, "Resume this session with:");
     if info.minimal {
-        let _ = writeln!(w, "  grok --minimal --resume {}", info.session_id);
+        let _ = writeln!(w, "  vktr --minimal --resume {}", info.session_id);
     } else {
-        let _ = writeln!(w, "  grok --resume {}", info.session_id);
+        let _ = writeln!(w, "  vktr --resume {}", info.session_id);
     }
 }
 /// Screen-mode relaunch failure fallback (same quit tail as plain resume).
@@ -1671,10 +1671,10 @@ pub(crate) fn set_terminal_title(title: &str) {
 fn terminal_title_string(title: &str) -> String {
     let sanitized: String = title.chars().filter(|c| !c.is_control()).collect();
     if sanitized.is_empty() {
-        "grok".into()
+        "vktr".into()
     } else {
         let truncated: String = sanitized.chars().take(80 - 6).collect();
-        format!("{} - grok", truncated)
+        format!("{} - vktr", truncated)
     }
 }
 #[cfg(test)]
@@ -1724,9 +1724,9 @@ mod tests {
     fn terminal_title_strips_control_characters() {
         assert_eq!(
             terminal_title_string("evil\x07\x1b]52;c;payload\x07title"),
-            "evil]52;c;payloadtitle - grok"
+            "evil]52;c;payloadtitle - vktr"
         );
-        assert_eq!(terminal_title_string("\x07\x1b\x00"), "grok");
+        assert_eq!(terminal_title_string("\x07\x1b\x00"), "vktr");
         assert_eq!(terminal_title_string(""), "vktr");
         assert_eq!(terminal_title_string("My chat"), "My chat - vktr");
     }
@@ -2257,7 +2257,7 @@ mod tests {
         assert_eq!(
             first_5,
             vec![
-                "vktr TUI",
+                "vktr: Viktor in your terminal, a coding agent for the repo in front of you",
                 "",
                 "Usage: vktr [OPTIONS] [PROMPT] [COMMAND]",
                 "",

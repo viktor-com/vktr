@@ -139,9 +139,12 @@ fn gc_dry_run_preserves_records() {
     let tmp = tempfile::TempDir::new().unwrap();
     let db = db_at(&tmp);
 
+    // A path under the fixture, not a bare "/nonexistent": some hosts really do have a
+    // root-owned /nonexistent directory (this one does), which would make the record alive.
+    let gone = tmp.path().join("gone");
     let record = crate::db::WorktreeRecord {
         created_at: 100,
-        ..crate::test_support::worktree_record("dry-1", "/nonexistent")
+        ..crate::test_support::worktree_record("dry-1", gone)
     };
     db.register(&record).unwrap();
 

@@ -22,9 +22,10 @@ fn next_rewrite_nonce() -> u64 {
     REWRITE_NONCE.fetch_add(1, Ordering::Relaxed)
 }
 
-/// One copy of the send-time thank-you, shared by the immediate and modal commit paths.
-pub(crate) const FEEDBACK_THANKS_NOTICE: &str =
-    "Thanks for the feedback! The vktr team is on it.";
+/// One copy of the send-time thank-you, shared by the immediate and modal commit paths. vktr has
+/// no feedback service (upstream's upload went to xAI), so the note only lands in the session's
+/// `feedback.jsonl`; the notice says so rather than promising a team will read it.
+pub(crate) const FEEDBACK_THANKS_NOTICE: &str = "Thanks for the feedback! Saved to feedback.jsonl in this session's folder; vktr sends it nowhere.";
 
 /// Minimal mode cannot show a toast, so the notice goes to the transcript instead.
 fn feedback_notice(app: &mut AppView, message: &str) {

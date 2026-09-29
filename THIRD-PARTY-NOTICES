@@ -76,6 +76,21 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+aes 0.9.3
+--------------------------------------------------------------------------------
+Source:  https://github.com/RustCrypto/block-ciphers
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2018-2024 The RustCrypto Project Developers
+  Copyright (c) 2018 Artyom Pavlov
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 aes-gcm 0.10.3
 --------------------------------------------------------------------------------
 Source:  https://github.com/RustCrypto/AEADs
@@ -306,6 +321,21 @@ Additional requirements / notices:
 
 --------------------------------------------------------------------------------
 anyhow 1.0.100
+--------------------------------------------------------------------------------
+Source:  https://github.com/dtolnay/anyhow
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright holders / authors (from package metadata):
+    - David Tolnay <dtolnay@gmail.com>
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+anyhow 1.0.104
 --------------------------------------------------------------------------------
 Source:  https://github.com/dtolnay/anyhow
 License: MIT  (upstream declares: MIT OR Apache-2.0)
@@ -714,6 +744,21 @@ Copyright notice:
   Copyright (c) 2019 Sebastian Dröge
 
 License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
+atoi_simd 0.18.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/RoDmitry/atoi_simd
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright 2022-NOW Dmitry Rodionov
+  Copyright (c) 2022 Dmitry Rodionov
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
 atomic 0.6.1
@@ -1292,6 +1337,20 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+base64 0.23.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/marshallpierce/rust-base64
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2015 Alice Maz
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 base64-simd 0.8.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/Nugine/simd
@@ -1594,6 +1653,20 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+bumpalo 3.19.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/fitzgen/bumpalo
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2019 Nick Fitzgerald
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 bytecount 0.6.9
 --------------------------------------------------------------------------------
 Source:  https://github.com/llogiq/bytecount
@@ -1609,6 +1682,20 @@ Additional requirements / notices:
 
 --------------------------------------------------------------------------------
 bytemuck 1.24.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/Lokathor/bytemuck
+License: MIT  (upstream declares: Zlib OR Apache-2.0 OR MIT)
+
+Copyright notice:
+  Copyright (c) 2019 Daniel "Lokathor" Gee.
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: Zlib OR Apache-2.0 OR MIT. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+bytemuck 1.25.2
 --------------------------------------------------------------------------------
 Source:  https://github.com/Lokathor/bytemuck
 License: MIT  (upstream declares: Zlib OR Apache-2.0 OR MIT)
@@ -1949,6 +2036,20 @@ Additional requirements / notices:
 
 --------------------------------------------------------------------------------
 chacha20 0.10.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/RustCrypto/stream-ciphers
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2019-2026 The RustCrypto Project Developers
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+chacha20 0.10.2
 --------------------------------------------------------------------------------
 Source:  https://github.com/RustCrypto/stream-ciphers
 License: MIT  (upstream declares: MIT OR Apache-2.0)
@@ -2384,6 +2485,34 @@ Additional requirements / notices:
   Upstream license expression: Apache-2.0 OR MIT. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+const-random 0.1.18
+--------------------------------------------------------------------------------
+Source:  https://github.com/tkaitchuck/constrandom
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2016 Amanieu d'Antras
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+const-random-macro 0.1.16
+--------------------------------------------------------------------------------
+Source:  https://github.com/tkaitchuck/constrandom
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2016 Amanieu d'Antras
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 constant_time_eq 0.1.5
 --------------------------------------------------------------------------------
 Source:  https://github.com/cesarb/constant_time_eq
@@ -2733,6 +2862,20 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+crossbeam-epoch 0.9.20
+--------------------------------------------------------------------------------
+Source:  https://github.com/crossbeam-rs/crossbeam
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2019 The Crossbeam Project Developers
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 crossbeam-queue 0.3.12
 --------------------------------------------------------------------------------
 Source:  https://github.com/crossbeam-rs/crossbeam
@@ -2779,6 +2922,17 @@ License: MIT
 
 Copyright notice:
   Copyright (c) 2019 Timon
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
+crunchy 0.2.4
+--------------------------------------------------------------------------------
+Source:  https://github.com/eira-fransham/crunchy
+License: MIT
+
+Copyright notice:
+  Copyright 2017-2023 Eira Fransham.
 
 License text: see Part II — MIT
 
@@ -2940,6 +3094,21 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+cursor-icon 1.2.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/rust-windowing/cursor-icon
+License: MIT  (upstream declares: MIT OR Apache-2.0 OR Zlib)
+
+Copyright notice:
+  Copyright 2023 Kirill Chibisov
+  Copyright (c) 2023 Kirill Chibisov
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0 OR Zlib. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 curve25519-dalek 4.1.3
 --------------------------------------------------------------------------------
 Source:  https://github.com/dalek-cryptography/curve25519-dalek/tree/main/curve25519-dalek
@@ -3032,6 +3201,17 @@ Copyright notice:
 License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
+darling 0.24.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/TedDriggs/darling
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2017 Ted Driggs
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
 darling_core 0.20.11
 --------------------------------------------------------------------------------
 Source:  https://github.com/TedDriggs/darling
@@ -3065,6 +3245,17 @@ Copyright notice:
 License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
+darling_core 0.24.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/TedDriggs/darling
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2017 Ted Driggs
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
 darling_macro 0.20.11
 --------------------------------------------------------------------------------
 Source:  https://github.com/TedDriggs/darling
@@ -3088,6 +3279,17 @@ License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
 darling_macro 0.23.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/TedDriggs/darling
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2017 Ted Driggs
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
+darling_macro 0.24.1
 --------------------------------------------------------------------------------
 Source:  https://github.com/TedDriggs/darling
 License: MIT
@@ -3143,6 +3345,20 @@ License: MIT  (upstream declares: MIT OR Apache-2.0)
 
 Copyright notice:
   Copyright (c) 2013-2025 The rust-url developers
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+debug_unsafe 0.1.3
+--------------------------------------------------------------------------------
+Source:  https://github.com/RoDmitry/debug_unsafe
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) Dmitry Rodionov <gh@rdmtr.com>
 
 License text: see Part II — MIT
 
@@ -4062,7 +4278,35 @@ Copyright notice:
 License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
+fast-float2 0.2.3
+--------------------------------------------------------------------------------
+Source:  https://github.com/Alexhuszagh/fast-float-rust
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright 2021 Ivan Smirnov
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 fast_image_resize 6.0.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/cykooz/fast_image_resize
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2021 Kirill Kuzminykh
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+fast_image_resize 6.1.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/cykooz/fast_image_resize
 License: MIT  (upstream declares: MIT OR Apache-2.0)
@@ -4983,6 +5227,20 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+gix-archive 0.32.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/GitoxideLabs/gitoxide
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) Sebastian Thiel <sebastian.thiel@icloud.com>
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 gix-attributes 0.33.2
 --------------------------------------------------------------------------------
 Source:  https://github.com/GitoxideLabs/gitoxide
@@ -5006,6 +5264,20 @@ License: MIT  (upstream declares: MIT OR Apache-2.0)
 Copyright notice:
   Copyright holders / authors (from package metadata):
     - Sebastian Thiel <sebastian.thiel@icloud.com>
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+gix-blame 0.13.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/GitoxideLabs/gitoxide
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) Christoph Rüßler <christoph.ruessler@mailbox.org>, Sebastian Thiel <sebastian.thiel@icloud.com>
 
 License text: see Part II — MIT
 
@@ -5277,6 +5549,34 @@ License: MIT  (upstream declares: MIT OR Apache-2.0)
 Copyright notice:
   Copyright holders / authors (from package metadata):
     - Sebastian Thiel <sebastian.thiel@icloud.com>
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+gix-merge 0.16.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/GitoxideLabs/gitoxide
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) Sebastian Thiel <sebastian.thiel@icloud.com>
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+gix-negotiate 0.31.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/GitoxideLabs/gitoxide
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) Sebastian Thiel <sebastian.thiel@icloud.com>
 
 License text: see Part II — MIT
 
@@ -5645,6 +5945,34 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+gix-worktree-state 0.30.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/GitoxideLabs/gitoxide
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) Sebastian Thiel <sebastian.thiel@icloud.com>
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+gix-worktree-stream 0.32.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/GitoxideLabs/gitoxide
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) Sebastian Thiel <sebastian.thiel@icloud.com>
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 glob 0.3.3
 --------------------------------------------------------------------------------
 Source:  https://github.com/rust-lang/glob
@@ -5717,6 +6045,17 @@ Additional requirements / notices:
 
 --------------------------------------------------------------------------------
 h2 0.4.15
+--------------------------------------------------------------------------------
+Source:  https://github.com/hyperium/h2
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2017 h2 authors
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
+h2 0.4.19
 --------------------------------------------------------------------------------
 Source:  https://github.com/hyperium/h2
 License: MIT
@@ -5826,6 +6165,20 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+hashbrown 0.17.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/rust-lang/hashbrown
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2016 Amanieu d'Antras
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 hashlink 0.10.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/kyren/hashlink
@@ -5855,6 +6208,20 @@ Additional requirements / notices:
 
 --------------------------------------------------------------------------------
 hayro-jbig2 0.3.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/LaurenzV/hayro
+License: MIT  (upstream declares: Apache-2.0 OR MIT)
+
+Copyright notice:
+  Copyright (c) The Hayro Authors
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: Apache-2.0 OR MIT. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+hayro-jpeg2000 0.4.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/LaurenzV/hayro
 License: MIT  (upstream declares: Apache-2.0 OR MIT)
@@ -6431,6 +6798,21 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+image 0.25.10
+--------------------------------------------------------------------------------
+Source:  https://github.com/image-rs/image
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright holders / authors (from package metadata):
+    - The image-rs Developers
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 image-webp 0.2.4
 --------------------------------------------------------------------------------
 Source:  https://github.com/image-rs/image-webp
@@ -6471,6 +6853,20 @@ Additional requirements / notices:
 
 --------------------------------------------------------------------------------
 indexmap 2.12.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/indexmap-rs/indexmap
+License: MIT  (upstream declares: Apache-2.0 OR MIT)
+
+Copyright notice:
+  Copyright (c) 2016--2017
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: Apache-2.0 OR MIT. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+indexmap 2.14.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/indexmap-rs/indexmap
 License: MIT  (upstream declares: Apache-2.0 OR MIT)
@@ -6607,6 +7003,31 @@ Copyright notice:
 License text: see Part II — BSD-3-Clause
 
 --------------------------------------------------------------------------------
+instant 0.1.12
+--------------------------------------------------------------------------------
+Source:  https://github.com/sebcrozet/instant
+License: BSD-3-Clause
+
+Copyright notice:
+  Copyright (c) 2019, Sébastien Crozet
+
+License text: see Part II — BSD-3-Clause
+
+--------------------------------------------------------------------------------
+io-close 0.3.7
+--------------------------------------------------------------------------------
+Source:  https://gitlab.com/wufz/io-close
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) wufz
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 ipnet 2.11.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/krisprice/ipnet
@@ -6699,6 +7120,20 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+itertools 0.12.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/rust-itertools/itertools
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2015
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 itoa 1.0.17
 --------------------------------------------------------------------------------
 Source:  https://github.com/dtolnay/itoa
@@ -6715,6 +7150,20 @@ Additional requirements / notices:
 
 --------------------------------------------------------------------------------
 jiff 0.2.28
+--------------------------------------------------------------------------------
+Source:  https://github.com/BurntSushi/jiff
+License: MIT  (upstream declares: Unlicense OR MIT)
+
+Copyright notice:
+  Copyright (c) 2015 Andrew Gallant
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: Unlicense OR MIT. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+jiff-static 0.2.28
 --------------------------------------------------------------------------------
 Source:  https://github.com/BurntSushi/jiff
 License: MIT  (upstream declares: Unlicense OR MIT)
@@ -7435,6 +7884,20 @@ Copyright notice:
 License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
+lru-slab 0.1.2
+--------------------------------------------------------------------------------
+Source:  https://github.com/Ralith/lru-slab
+License: MIT  (upstream declares: MIT OR Apache-2.0 OR Zlib)
+
+Copyright notice:
+  Copyright (c) 2024 The lru-slab Developers
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0 OR Zlib. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 lsp-types 0.95.1
 --------------------------------------------------------------------------------
 Source:  https://github.com/gluon-lang/lsp-types
@@ -7690,6 +8153,21 @@ Additional requirements / notices:
 
 --------------------------------------------------------------------------------
 memmap2 0.9.10
+--------------------------------------------------------------------------------
+Source:  https://github.com/RazrFalcon/memmap2-rs
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2020 Yevhenii Reizner
+  Copyright (c) 2015 Dan Burkert
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+memmap2 0.9.11
 --------------------------------------------------------------------------------
 Source:  https://github.com/RazrFalcon/memmap2-rs
 License: MIT  (upstream declares: MIT OR Apache-2.0)
@@ -8080,6 +8558,21 @@ License text: see Part II — BSD-3-Clause
 
 Additional requirements / notices:
   Upstream license expression: BSD-3-Clause OR Apache-2.0. For this distribution, obligations are satisfied under: BSD-3-Clause.
+
+--------------------------------------------------------------------------------
+moxcms 0.8.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/awxkee/moxcms.git
+License: Apache-2.0  (upstream declares: BSD-3-Clause OR Apache-2.0)
+
+Copyright notice:
+  Copyright 2024 Radzivon Bartoshyk
+  Copyright (c) Radzivon Bartoshyk. All rights reserved.
+
+License text: see Part II — Apache-2.0
+
+Additional requirements / notices:
+  Upstream license expression: BSD-3-Clause OR Apache-2.0. For this distribution, obligations are satisfied under: Apache-2.0.
 
 --------------------------------------------------------------------------------
 multer 3.1.0
@@ -8607,6 +9100,21 @@ License text: see Part II — MIT
 
 Additional requirements / notices:
   Upstream license expression: Apache-2.0 OR MIT. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+office_oxide 0.1.9
+--------------------------------------------------------------------------------
+Source:  https://github.com/yfedoseev/office_oxide
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2026 Yury Fedoseev
+  Copyright (c) 2026 Yury Fedoseev and the OfficeOxide project contributors
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
 omniparse 0.2.1
@@ -9152,6 +9660,20 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+pdf_oxide 0.3.74
+--------------------------------------------------------------------------------
+Source:  https://github.com/yfedoseev/pdf_oxide
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2025-present Yury Fedoseev
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 pem 3.0.6
 --------------------------------------------------------------------------------
 Source:  https://github.com/jcreekmore/pem-rs
@@ -9334,6 +9856,17 @@ Copyright notice:
 License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
+phf 0.14.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/rust-phf/rust-phf
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2014-2022 Steven Fackler, Yuki Okushi
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
 phf_codegen 0.10.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/sfackler/rust-phf
@@ -9413,6 +9946,17 @@ Copyright notice:
 License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
+phf_generator 0.14.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/rust-phf/rust-phf
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2014-2022 Steven Fackler, Yuki Okushi
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
 phf_macros 0.11.3
 --------------------------------------------------------------------------------
 Source:  https://github.com/rust-phf/rust-phf
@@ -9436,6 +9980,17 @@ License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
 phf_macros 0.13.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/rust-phf/rust-phf
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2014-2022 Steven Fackler, Yuki Okushi
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
+phf_macros 0.14.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/rust-phf/rust-phf
 License: MIT
@@ -9481,6 +10036,17 @@ License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
 phf_shared 0.13.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/rust-phf/rust-phf
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2014-2022 Steven Fackler, Yuki Okushi
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
+phf_shared 0.14.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/rust-phf/rust-phf
 License: MIT
@@ -9618,6 +10184,17 @@ Additional requirements / notices:
 
 --------------------------------------------------------------------------------
 plist 1.8.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/ebarnard/rust-plist
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2015 Edward Barnard
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
+plist 1.10.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/ebarnard/rust-plist
 License: MIT
@@ -10045,6 +10622,31 @@ Additional requirements / notices:
   Upstream license expression: Apache-2.0 OR MIT. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+prometheus-parse 0.2.5
+--------------------------------------------------------------------------------
+Source:  https://github.com/ccakes/prometheus-parse-rs
+License: Apache-2.0
+
+Copyright notice:
+  Copyright (c) Cameron Daniel <cam.daniel@gmail.com>
+
+License text: see Part II — Apache-2.0
+
+--------------------------------------------------------------------------------
+proptest 1.10.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/proptest-rs/proptest
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2016 FullContact, Inc
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 prost 0.14.3
 --------------------------------------------------------------------------------
 Source:  https://github.com/tokio-rs/prost
@@ -10300,6 +10902,59 @@ Copyright notice:
 License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
+quick-xml 0.41.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/tafia/quick-xml
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2016 Johann Tuffe
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
+quinn 0.11.9
+--------------------------------------------------------------------------------
+Source:  https://github.com/quinn-rs/quinn
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2018 The quinn Developers
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+quinn-proto 0.11.15
+--------------------------------------------------------------------------------
+Source:  https://github.com/quinn-rs/quinn
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2018 The quinn Developers
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+quinn-udp 0.5.14
+--------------------------------------------------------------------------------
+Source:  https://github.com/quinn-rs/quinn
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2018 The quinn Developers
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 quote 1.0.45
 --------------------------------------------------------------------------------
 Source:  https://github.com/dtolnay/quote
@@ -10346,6 +11001,21 @@ Additional requirements / notices:
 
 --------------------------------------------------------------------------------
 rand 0.10.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/rust-random/rand
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright 2018 Developers of the Rand project
+  Copyright (c) 2014 The Rust Project Developers
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+rand 0.9.5
 --------------------------------------------------------------------------------
 Source:  https://github.com/rust-random/rand
 License: MIT  (upstream declares: MIT OR Apache-2.0)
@@ -10448,6 +11118,21 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+rand_xorshift 0.4.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/rust-random/rngs
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright 2018 Developers of the Rand project
+  Copyright (c) 2014 The Rust Project Developers
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 rapidhash 4.2.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/hoxxep/rapidhash
@@ -10514,6 +11199,20 @@ Additional requirements / notices:
 
 --------------------------------------------------------------------------------
 rayon 1.11.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/rayon-rs/rayon
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2010 The Rust Project Developers
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+rayon 1.12.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/rayon-rs/rayon
 License: MIT  (upstream declares: MIT OR Apache-2.0)
@@ -10796,6 +11495,34 @@ Copyright notice:
 License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
+rhai 1.25.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/rhaiscript/rhai
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) Jonathan Turner, Lukáš Hozda, Stephen Chung, jhwgh1968
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+rhai_codegen 3.2.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/rhaiscript/rhai
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) jhwgh1968, Stephen Chung
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 ring 0.17.14
 --------------------------------------------------------------------------------
 Source:  https://github.com/briansmith/ring
@@ -10828,7 +11555,35 @@ Additional requirements / notices:
   Apache-2.0 additional terms: this package is used unmodified from its upstream source/crates.io (or git) release for this product build. Any NOTICE file shipped with the package (if present) is reproduced below.
 
 --------------------------------------------------------------------------------
+rmcp 3.2.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/modelcontextprotocol/rust-sdk
+License: Apache-2.0
+
+Copyright notice:
+  Copyright (c) the package authors. See the package repository for details.
+
+License text: see Part II — Apache-2.0
+
+Additional requirements / notices:
+  Apache-2.0 additional terms: this package is used unmodified from its upstream source/crates.io (or git) release for this product build. Any NOTICE file shipped with the package (if present) is reproduced below.
+
+--------------------------------------------------------------------------------
 rmcp-macros 2.1.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/modelcontextprotocol/rust-sdk
+License: Apache-2.0
+
+Copyright notice:
+  Copyright (c) the package authors. See the package repository for details.
+
+License text: see Part II — Apache-2.0
+
+Additional requirements / notices:
+  Apache-2.0 additional terms: this package is used unmodified from its upstream source/crates.io (or git) release for this product build. Any NOTICE file shipped with the package (if present) is reproduced below.
+
+--------------------------------------------------------------------------------
+rmcp-macros 3.2.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/modelcontextprotocol/rust-sdk
 License: Apache-2.0
@@ -10887,6 +11642,22 @@ Additional requirements / notices:
 
 --------------------------------------------------------------------------------
 rtrb 0.3.2
+--------------------------------------------------------------------------------
+Source:  https://github.com/mgeier/rtrb
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright holders / authors (from package metadata):
+    - Stjepan Glavina <stjepang@gmail.com>
+    - Matthias Geier <Matthias.Geier@gmail.com>
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+rtrb 0.3.5
 --------------------------------------------------------------------------------
 Source:  https://github.com/mgeier/rtrb
 License: MIT  (upstream declares: MIT OR Apache-2.0)
@@ -11926,6 +12697,20 @@ Additional requirements / notices:
   Upstream license expression: Apache-2.0/MIT. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+signal-hook-registry 1.4.8
+--------------------------------------------------------------------------------
+Source:  https://github.com/vorner/signal-hook
+License: MIT  (upstream declares: Apache-2.0/MIT)
+
+Copyright notice:
+  Copyright (c) 2017 tokio-jsonrpc developers
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: Apache-2.0/MIT. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 signature 2.2.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/RustCrypto/traits/tree/master/signature
@@ -12242,6 +13027,20 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+smartstring 1.0.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/bodil/smartstring
+License: MPL-2.0  (upstream declares: MPL-2.0+)
+
+Copyright notice:
+  Copyright (c) Bodil Stokke <bodil@bodil.org>
+
+License text: see Part II — MPL-2.0
+
+Additional requirements / notices:
+  Upstream license expression: MPL-2.0+. For this distribution, obligations are satisfied under: MPL-2.0.
+
+--------------------------------------------------------------------------------
 smawk 0.3.2
 --------------------------------------------------------------------------------
 Source:  https://github.com/mgeisler/smawk
@@ -12290,6 +13089,28 @@ License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
 spin 0.10.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/mvdnes/spin-rs
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2014 Mathijs van de Nes
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
+spin 0.10.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/mvdnes/spin-rs
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2014 Mathijs van de Nes
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
+spin 0.9.9
 --------------------------------------------------------------------------------
 Source:  https://github.com/mvdnes/spin-rs
 License: MIT
@@ -12390,6 +13211,21 @@ Additional requirements / notices:
 
 --------------------------------------------------------------------------------
 sse-stream 0.2.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/4t145/sse-stream
+License: MIT  (upstream declares: MIT/Apache-2.0)
+
+Copyright notice:
+  Copyright holders / authors (from package metadata):
+    - 4t145 <u4t145@163.com>
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT/Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+sse-stream 0.2.5
 --------------------------------------------------------------------------------
 Source:  https://github.com/4t145/sse-stream
 License: MIT  (upstream declares: MIT/Apache-2.0)
@@ -13306,6 +14142,21 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+syn 3.0.4
+--------------------------------------------------------------------------------
+Source:  https://github.com/dtolnay/syn
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright holders / authors (from package metadata):
+    - David Tolnay <dtolnay@gmail.com>
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 sync_wrapper 1.0.2
 --------------------------------------------------------------------------------
 Source:  https://github.com/Actyx/sync_wrapper
@@ -13343,6 +14194,20 @@ License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
 taffy 0.10.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/DioxusLabs/taffy
+License: MIT
+
+Copyright notice:
+  Copyright holders / authors (from package metadata):
+    - Alice Cecile <alice.i.cecile@gmail.com>
+    - Johnathan Kelley <jkelleyrtp@gmail.com>
+    - Nico Burns <nico@nicoburns.com>
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
+taffy 0.12.2
 --------------------------------------------------------------------------------
 Source:  https://github.com/DioxusLabs/taffy
 License: MIT
@@ -13482,6 +14347,20 @@ Copyright notice:
 License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
+thin-vec 0.2.18
+--------------------------------------------------------------------------------
+Source:  https://github.com/mozilla/thin-vec
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) Aria Beingessner <a.beingessner@gmail.com>
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 thiserror 1.0.69
 --------------------------------------------------------------------------------
 Source:  https://github.com/dtolnay/thiserror
@@ -13578,7 +14457,32 @@ Copyright notice:
 License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
+tiff 0.11.3
+--------------------------------------------------------------------------------
+Source:  https://github.com/image-rs/image-tiff
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2018 PistonDevelopers
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
 tikv-jemalloc-ctl 0.6.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/tikv/jemallocator
+License: MIT  (upstream declares: MIT/Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2017 Steven Fackler
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT/Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+tikv-jemalloc-ctl 0.7.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/tikv/jemallocator
 License: MIT  (upstream declares: MIT/Apache-2.0)
@@ -13606,7 +14510,40 @@ Additional requirements / notices:
   Upstream license expression: MIT/Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+tikv-jemalloc-sys 0.7.1+5.3.1-0-g81034ce1f1373e37dc865038e1bc8eeecf559ce8
+--------------------------------------------------------------------------------
+Source:  https://github.com/tikv/jemallocator
+License: MIT  (upstream declares: MIT/Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2014 Alex Crichton
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT/Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+  This crate builds and statically links the jemalloc C library (jemalloc/ in the crate), which is
+  licensed under BSD-2-Clause (text: see Part II — BSD-2-Clause):
+    Copyright (C) 2002-present Jason Evans <jasone@canonware.com>. All rights reserved.
+    Copyright (C) 2007-2012 Mozilla Foundation. All rights reserved.
+    Copyright (C) 2009-present Facebook, Inc. All rights reserved.
+
+--------------------------------------------------------------------------------
 tikv-jemallocator 0.6.1
+--------------------------------------------------------------------------------
+Source:  https://github.com/tikv/jemallocator
+License: MIT  (upstream declares: MIT/Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2014 Alex Crichton
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT/Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+tikv-jemallocator 0.7.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/tikv/jemallocator
 License: MIT  (upstream declares: MIT/Apache-2.0)
@@ -13660,6 +14597,17 @@ License text: see Part II — MIT
 
 Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+tiny-keccak 2.0.2
+--------------------------------------------------------------------------------
+Source:  https://crates.io/crates/tiny-keccak/2.0.2
+License: CC0-1.0
+
+Copyright notice:
+  Copyright (c) debris <marek.kotewicz@gmail.com>
+
+License text: see Part II — CC0-1.0
 
 --------------------------------------------------------------------------------
 tiny-skia 0.12.0
@@ -14386,6 +15334,20 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+typed-path 0.12.3
+--------------------------------------------------------------------------------
+Source:  https://github.com/chipsenkbeil/typed-path
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) Chip Senkbeil <chip@senkbeil.org>
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 typenum 1.19.0
 --------------------------------------------------------------------------------
 Source:  https://github.com/paholg/typenum
@@ -14501,6 +15463,20 @@ License text: see Part II — MIT
 
 Additional requirements / notices:
   Upstream license expression: MIT/Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+unarray 0.1.4
+--------------------------------------------------------------------------------
+Source:  https://github.com/cameron1024/unarray
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) The unarray developers
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
 unicase 2.8.1
@@ -14803,6 +15779,34 @@ Copyright notice:
   Copyright 2015-2016 Brian Smith.
 
 License text: see Part II — ISC
+
+--------------------------------------------------------------------------------
+ureq 3.1.4
+--------------------------------------------------------------------------------
+Source:  https://github.com/algesten/ureq
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2019 Martin Algesten
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+ureq-proto 0.5.2
+--------------------------------------------------------------------------------
+Source:  https://github.com/algesten/ureq-proto
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright 2022 Martin Algesten
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
 url 2.5.8
@@ -15181,6 +16185,20 @@ Additional requirements / notices:
   Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
 
 --------------------------------------------------------------------------------
+webbrowser 1.2.4
+--------------------------------------------------------------------------------
+Source:  https://github.com/amodm/webbrowser-rs
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) 2015-2022 Amod Malviya
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
 webpki-roots 0.26.11
 --------------------------------------------------------------------------------
 Source:  https://github.com/rustls/webpki-roots
@@ -15204,6 +16222,20 @@ License text: see Part II — CDLA-Permissive-2.0
 
 --------------------------------------------------------------------------------
 weezl 0.1.10
+--------------------------------------------------------------------------------
+Source:  https://github.com/image-rs/weezl
+License: MIT  (upstream declares: MIT OR Apache-2.0)
+
+Copyright notice:
+  Copyright (c) HeroicKatora 2020
+
+License text: see Part II — MIT
+
+Additional requirements / notices:
+  Upstream license expression: MIT OR Apache-2.0. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+weezl 0.2.1
 --------------------------------------------------------------------------------
 Source:  https://github.com/image-rs/weezl
 License: MIT  (upstream declares: MIT OR Apache-2.0)
@@ -15326,6 +16358,17 @@ License text: see Part II — MIT
 
 Additional requirements / notices:
   Upstream license expression: Zlib OR Apache-2.0 OR MIT. For this distribution, obligations are satisfied under: MIT.
+
+--------------------------------------------------------------------------------
+wildmatch 2.6.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/becheran/wildmatch
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2020 Armin Becher
+
+License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
 winapi 0.3.9
@@ -16297,7 +17340,43 @@ Copyright notice:
 License text: see Part II — MIT
 
 --------------------------------------------------------------------------------
+zip 3.0.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/zip-rs/zip
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2014 Mathijs van de Nes
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
+zip 8.6.0
+--------------------------------------------------------------------------------
+Source:  https://github.com/zip-rs/zip
+License: MIT
+
+Copyright notice:
+  Copyright (c) 2014 Mathijs van de Nes
+
+License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
 zlib-rs 0.5.5
+--------------------------------------------------------------------------------
+Source:  https://github.com/trifectatechfoundation/zlib-rs
+License: Zlib
+
+Copyright notice:
+  (C) 2024 Trifecta Tech Foundation
+
+License text: see Part II — Zlib
+
+Additional requirements / notices:
+  Zlib additional terms: this package is used unmodified; no changes were made to the upstream source as incorporated via crates.io.
+
+--------------------------------------------------------------------------------
+zlib-rs 0.6.6
 --------------------------------------------------------------------------------
 Source:  https://github.com/trifectatechfoundation/zlib-rs
 License: Zlib
@@ -16321,6 +17400,17 @@ Copyright notice:
     - David Tolnay <dtolnay@gmail.com>
 
 License text: see Part II — MIT
+
+--------------------------------------------------------------------------------
+zopfli 0.8.3
+--------------------------------------------------------------------------------
+Source:  https://github.com/zopfli-rs/zopfli
+License: Apache-2.0
+
+Copyright notice:
+  Copyright 2011 Google Inc.
+
+License text: see Part II — Apache-2.0
 
 --------------------------------------------------------------------------------
 zstd 0.11.2+zstd.1.5.2
@@ -18918,6 +20008,134 @@ NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+
+################################################################################
+# CC0-1.0
+################################################################################
+
+Creative Commons Legal Code
+
+CC0 1.0 Universal
+
+    CREATIVE COMMONS CORPORATION IS NOT A LAW FIRM AND DOES NOT PROVIDE
+    LEGAL SERVICES. DISTRIBUTION OF THIS DOCUMENT DOES NOT CREATE AN
+    ATTORNEY-CLIENT RELATIONSHIP. CREATIVE COMMONS PROVIDES THIS
+    INFORMATION ON AN "AS-IS" BASIS. CREATIVE COMMONS MAKES NO WARRANTIES
+    REGARDING THE USE OF THIS DOCUMENT OR THE INFORMATION OR WORKS
+    PROVIDED HEREUNDER, AND DISCLAIMS LIABILITY FOR DAMAGES RESULTING FROM
+    THE USE OF THIS DOCUMENT OR THE INFORMATION OR WORKS PROVIDED
+    HEREUNDER.
+
+Statement of Purpose
+
+The laws of most jurisdictions throughout the world automatically confer
+exclusive Copyright and Related Rights (defined below) upon the creator
+and subsequent owner(s) (each and all, an "owner") of an original work of
+authorship and/or a database (each, a "Work").
+
+Certain owners wish to permanently relinquish those rights to a Work for
+the purpose of contributing to a commons of creative, cultural and
+scientific works ("Commons") that the public can reliably and without fear
+of later claims of infringement build upon, modify, incorporate in other
+works, reuse and redistribute as freely as possible in any form whatsoever
+and for any purposes, including without limitation commercial purposes.
+These owners may contribute to the Commons to promote the ideal of a free
+culture and the further production of creative, cultural and scientific
+works, or to gain reputation or greater distribution for their Work in
+part through the use and efforts of others.
+
+For these and/or other purposes and motivations, and without any
+expectation of additional consideration or compensation, the person
+associating CC0 with a Work (the "Affirmer"), to the extent that he or she
+is an owner of Copyright and Related Rights in the Work, voluntarily
+elects to apply CC0 to the Work and publicly distribute the Work under its
+terms, with knowledge of his or her Copyright and Related Rights in the
+Work and the meaning and intended legal effect of CC0 on those rights.
+
+1. Copyright and Related Rights. A Work made available under CC0 may be
+protected by copyright and related or neighboring rights ("Copyright and
+Related Rights"). Copyright and Related Rights include, but are not
+limited to, the following:
+
+  i. the right to reproduce, adapt, distribute, perform, display,
+     communicate, and translate a Work;
+ ii. moral rights retained by the original author(s) and/or performer(s);
+iii. publicity and privacy rights pertaining to a person's image or
+     likeness depicted in a Work;
+ iv. rights protecting against unfair competition in regards to a Work,
+     subject to the limitations in paragraph 4(a), below;
+  v. rights protecting the extraction, dissemination, use and reuse of data
+     in a Work;
+ vi. database rights (such as those arising under Directive 96/9/EC of the
+     European Parliament and of the Council of 11 March 1996 on the legal
+     protection of databases, and under any national implementation
+     thereof, including any amended or successor version of such
+     directive); and
+vii. other similar, equivalent or corresponding rights throughout the
+     world based on applicable law or treaty, and any national
+     implementations thereof.
+
+2. Waiver. To the greatest extent permitted by, but not in contravention
+of, applicable law, Affirmer hereby overtly, fully, permanently,
+irrevocably and unconditionally waives, abandons, and surrenders all of
+Affirmer's Copyright and Related Rights and associated claims and causes
+of action, whether now known or unknown (including existing as well as
+future claims and causes of action), in the Work (i) in all territories
+worldwide, (ii) for the maximum duration provided by applicable law or
+treaty (including future time extensions), (iii) in any current or future
+medium and for any number of copies, and (iv) for any purpose whatsoever,
+including without limitation commercial, advertising or promotional
+purposes (the "Waiver"). Affirmer makes the Waiver for the benefit of each
+member of the public at large and to the detriment of Affirmer's heirs and
+successors, fully intending that such Waiver shall not be subject to
+revocation, rescission, cancellation, termination, or any other legal or
+equitable action to disrupt the quiet enjoyment of the Work by the public
+as contemplated by Affirmer's express Statement of Purpose.
+
+3. Public License Fallback. Should any part of the Waiver for any reason
+be judged legally invalid or ineffective under applicable law, then the
+Waiver shall be preserved to the maximum extent permitted taking into
+account Affirmer's express Statement of Purpose. In addition, to the
+extent the Waiver is so judged Affirmer hereby grants to each affected
+person a royalty-free, non transferable, non sublicensable, non exclusive,
+irrevocable and unconditional license to exercise Affirmer's Copyright and
+Related Rights in the Work (i) in all territories worldwide, (ii) for the
+maximum duration provided by applicable law or treaty (including future
+time extensions), (iii) in any current or future medium and for any number
+of copies, and (iv) for any purpose whatsoever, including without
+limitation commercial, advertising or promotional purposes (the
+"License"). The License shall be deemed effective as of the date CC0 was
+applied by Affirmer to the Work. Should any part of the License for any
+reason be judged legally invalid or ineffective under applicable law, such
+partial invalidity or ineffectiveness shall not invalidate the remainder
+of the License, and in such case Affirmer hereby affirms that he or she
+will not (i) exercise any of his or her remaining Copyright and Related
+Rights in the Work or (ii) assert any associated claims and causes of
+action with respect to the Work, in either case contrary to Affirmer's
+express Statement of Purpose.
+
+4. Limitations and Disclaimers.
+
+ a. No trademark or patent rights held by Affirmer are waived, abandoned,
+    surrendered, licensed or otherwise affected by this document.
+ b. Affirmer offers the Work as-is and makes no representations or
+    warranties of any kind concerning the Work, express, implied,
+    statutory or otherwise, including without limitation warranties of
+    title, merchantability, fitness for a particular purpose, non
+    infringement, or the absence of latent or other defects, accuracy, or
+    the present or absence of errors, whether or not discoverable, all to
+    the greatest extent permissible under applicable law.
+ c. Affirmer disclaims responsibility for clearing rights of other persons
+    that may apply to the Work or any use thereof, including without
+    limitation any person's Copyright and Related Rights in the Work.
+    Further, Affirmer disclaims responsibility for obtaining any necessary
+    consents, permissions or other rights required for any use of the
+    Work.
+ d. Affirmer understands and acknowledges that Creative Commons is not a
+    party to this document and has no duty or obligation with respect to
+    this CC0 or use of the Work.
 
 
 ================================================================================

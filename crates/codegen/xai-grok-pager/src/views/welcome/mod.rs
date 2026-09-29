@@ -27,6 +27,7 @@ mod hero_box;
 pub(crate) mod logo;
 mod menu;
 mod prompt;
+mod splash;
 mod toast;
 mod top_bar;
 #[cfg(feature = "local-workspace")]
@@ -35,8 +36,8 @@ pub(crate) mod workspace_mode;
 /// Compact welcome/session/waiting/dock share this one-col left gutter.
 pub(crate) const PROMPT_GUTTER: u16 = 1;
 
-pub(crate) use logo::shimmer_frame;
 use logo::{LogoTier, logo_line_count, render_logo, render_logo_tier};
+pub(crate) use logo::{logo_animating, shimmer_frame};
 use menu::render_menu;
 pub(crate) use toast::paint_welcome_toast;
 use top_bar::render_top_bar;
@@ -275,6 +276,8 @@ pub(super) struct WelcomeLayout {
     pub(super) tip: Rect,
     pub(super) prompt: Rect,
     pub(super) version: Rect,
+    /// Splash status line under the wordmark; zero outside the splash.
+    pub(super) status: Rect,
     // Hero box sub-rects (all zero when hero box is inactive).
     pub(super) hero_box: Rect,
     pub(super) hero_logo: Rect,
@@ -482,6 +485,7 @@ impl WelcomeLayout {
             tip,
             prompt,
             version,
+            status: zero,
             hero_box: zero,
             hero_logo: zero,
             hero_version: zero,
@@ -662,7 +666,7 @@ fn render_prompt_and_version(
                 subscription_tier: None,
             },
         );
-    } else {
+    } else if layout.status.height == 0 {
         render_version_badge(
             layout.version,
             buf,
@@ -787,12 +791,22 @@ pub fn render_welcome(
         width: top_bar_area.width.saturating_sub(h_margin * 2),
         height: 1,
     };
-    render_top_bar(top_bar_inner, buf, &theme, None);
+    let splash_home = matches!(params.auth_state, AuthState::Done)
+        && params.has_access
+        && !params.is_zdr_blocked
+        && !matches!(params.consent_state, ConsentState::Pending { .. })
+        && !matches!(params.trust_state, TrustState::Pending { .. })
+        && params.session_picker.is_none()
+        && !params.session_picker_loading;
+    if !splash_home {
+        render_top_bar(top_bar_inner, buf, &theme, None);
+    }
 
     let mut result = match params.auth_state {
         AuthState::Pending { error } => {
             let label = params.login_label.unwrap_or("grok.com");
-            let login_text = format!("Login with {}", label);
+            let _ = label;
+            let login_text = "Sign in with a Viktor API key".to_string();
             let menu = [("l", login_text.as_str()), ("q", "Quit")];
             let msg = error.as_deref().map(|e| (e, theme.accent_error));
             let info = PromptInfo {
@@ -1114,6 +1128,10 @@ fn auth_copy_line(theme: &Theme) -> Line<'static> {
 }
 
 /// Number of physical rows the header and the blank row occupy before the copy line.
+/// The sign-in screen's instruction above the key box.
+const PASTE_KEY_HINT: &str =
+    "Paste a Viktor API key (zt_live_sk_…, scope chat:completions). vktr checks it, then saves it.";
+
 fn auth_copy_preceding_rows(header: &str, inner_width: u16) -> u16 {
     let header_rows = (header.len() as u16).div_ceil(inner_width);
     header_rows + 1 // header + blank
@@ -1441,7 +1459,8 @@ fn render_welcome_authenticating(
                 let header_rows = (AUTH_HEADER.len() as u16).div_ceil(inner_width);
                 header_rows + auth_copy_block_rows(inner_width)
             } else {
-                1u16
+                // Word-wrapped, so a narrow window gets the whole sentence instead of its first row
+                textwrap::wrap(PASTE_KEY_HINT, inner_width as usize).len() as u16
             };
             let [_, logo_area, _, msg_area, _, prompt_area, _, hint_area, _] = Layout::vertical([
                 Constraint::Length(top_pad),
@@ -1470,10 +1489,11 @@ fn render_welcome_authenticating(
                 );
                 push_auth_copy_block(&mut lines, theme, clipboard_delivery);
             } else {
+                // vktr: the paste box is the sign-in (no browser URL to wait for).
                 lines.push(
                     Line::from(Span::styled(
-                        "Waiting for auth URL...",
-                        Style::default().fg(theme.gray),
+                        PASTE_KEY_HINT,
+                        Style::default().fg(theme.gray_bright),
                     ))
                     .alignment(Alignment::Center),
                 );
@@ -1717,6 +1737,13 @@ fn render_welcome_done(
     // Only use compact layout when the session picker is visible; it needs the logo/centering space for its list
     // Plain compact mode keeps the normal welcome layout
     let welcome_compact = show_picker;
+    #[cfg(feature = "local-workspace")]
+    let workspace_picker_wanted =
+        p.chat_mode && p.has_access && (!show_picker || p.workspace_mode_ack_pending);
+    #[cfg(not(feature = "local-workspace"))]
+    let workspace_picker_wanted = false;
+    // Signed in with access and nothing to pick: the splash (wordmark and status line) replaces the menu
+    let splash = p.has_access && !show_picker && !workspace_picker_wanted;
 
     let cta = p
         .gate
@@ -1749,7 +1776,7 @@ fn render_welcome_done(
             crate::views::privacy_banner::height(content_area.width.saturating_sub(inset * 2))
         } else if has_resume_tip {
             1u16
-        } else if let Some(tip_text) = p.tip {
+        } else if let Some(tip_text) = p.tip.filter(|_| !splash) {
             let inset = prompt::prompt_inset(welcome_compact);
             let tip_width = content_area.width.saturating_sub(inset * 2);
             crate::tips::render::tip_height(tip_width, tip_text)
@@ -1759,13 +1786,14 @@ fn render_welcome_done(
     } else {
         0
     };
-    let changelog_height = if p.has_access && !show_picker && !p.changelog_bullets.is_empty() {
-        2 + p.changelog_bullets.len() as u16
-    } else {
-        0
-    };
+    let changelog_height =
+        if p.has_access && !show_picker && !splash && !p.changelog_bullets.is_empty() {
+            2 + p.changelog_bullets.len() as u16
+        } else {
+            0
+        };
     // Changelog is reachable via this menu row (ctrl+l). Show from the first frame so the menu doesn't shift while the CDN fetch completes.
-    let show_changelog_action = p.has_access && !show_picker;
+    let show_changelog_action = p.has_access && !show_picker && !splash;
 
     let gate_menu;
     let owned_menu;
@@ -1812,7 +1840,7 @@ fn render_welcome_done(
     #[cfg(not(feature = "local-workspace"))]
     let workspace_picker_rows = 0u16;
 
-    let menu_height = if show_picker {
+    let menu_height = if show_picker || splash {
         0
     } else {
         menu_items.len() as u16 + workspace_picker_rows
@@ -1863,7 +1891,11 @@ fn render_welcome_done(
             prompt_max_height(&layout_input),
         ));
     }
-    let layout = WelcomeLayout::compute(layout_input);
+    let layout = if splash {
+        splash::compute_splash(&layout_input)
+    } else {
+        WelcomeLayout::compute(layout_input)
+    };
 
     // Render startup warning in the error area (same slot as auth errors).
     let import_banner_rect = render_startup_warnings(layout.error, buf, theme, p.startup_warnings);
@@ -1907,6 +1939,10 @@ fn render_welcome_done(
             },
         );
         (vec![], Some(hit_areas))
+    } else if splash {
+        render_logo_tier(layout.logo, buf, theme, layout.logo_tier);
+        splash::render_status_line(layout.status, buf, theme, p.team_name, p.is_api_key_auth);
+        (vec![], None)
     } else if layout.has_hero_box() {
         // Wide layout: render the bordered hero box with the logo left, version and menu right
         let rects = hero_box::render_hero_box(
@@ -2261,7 +2297,7 @@ fn render_welcome_done(
             p.compact,
             p.pending_hint,
             p.is_api_key_auth,
-            layout.has_hero_box(),
+            layout.has_hero_box() || splash,
         )
     };
 
@@ -2665,7 +2701,7 @@ fn build_masked_auth_token(input: &str, cursor_byte: usize) -> MaskedAuthToken {
 
 fn masked_auth_token_view(input: &str, cursor_byte: usize, width: usize) -> (String, usize) {
     if input.is_empty() {
-        return ("Paste your token here...".to_string(), 0);
+        return ("Paste your Viktor API key...".to_string(), 0);
     }
     let masked = build_masked_auth_token(input, cursor_byte);
     let buffer =
@@ -2756,7 +2792,7 @@ mod tests {
     fn masked_auth_token_preserves_reveal_policy() {
         assert_eq!(
             masked_auth_token_view("", 0, 24),
-            ("Paste your token here...".to_string(), 0)
+            ("Paste your Viktor API key...".to_string(), 0)
         );
         assert_eq!(build_masked_auth_token("12345678", 8).display, "12345678");
         assert_eq!(build_masked_auth_token("123456789", 9).display, "•••••6789");
@@ -3479,14 +3515,14 @@ mod tests {
 
     #[test]
     fn hero_box_active_on_wide_tall_terminal() {
-        // 90 cols, 50 rows: meets the minimum for the hero box.
-        let area = Rect::new(0, 0, 90, 50);
+        // 100 cols, 50 rows: meets the minimum for the hero box.
+        let area = Rect::new(0, 0, 100, 50);
         let layout = WelcomeLayout::compute(WelcomeLayoutInput {
             content_area: area,
             menu_height: 4,
             ..Default::default()
         });
-        assert!(layout.has_hero_box(), "hero box should be active at 90x50");
+        assert!(layout.has_hero_box(), "hero box should be active at 100x50");
         assert!(layout.hero_box.width > 0);
         assert!(layout.hero_box.height > 0);
         // Logo and menu slots are zero in hero box mode (content is inside the box).
@@ -3524,7 +3560,7 @@ mod tests {
 
     #[test]
     fn hero_box_prompt_grows_into_the_flex_gap_and_holds_the_box_still() {
-        let area = Rect::new(0, 0, 90, 50);
+        let area = Rect::new(0, 0, 100, 50);
         let input = |prompt_height| WelcomeLayoutInput {
             content_area: area,
             menu_height: 4,
@@ -3547,8 +3583,8 @@ mod tests {
 
     #[test]
     fn hero_box_moves_up_only_once_the_flex_gap_is_gone() {
-        // 90x26: an 11-row box, a one-row flex gap and an 11-row prompt fit exactly (min_content_height 25)
-        let area = Rect::new(0, 0, 90, 26);
+        // 100x26: an 11-row box, a one-row flex gap and an 11-row prompt fit exactly (min_content_height 25)
+        let area = Rect::new(0, 0, 100, 26);
         let input = |prompt_height| WelcomeLayoutInput {
             content_area: area,
             menu_height: 4,
@@ -3567,7 +3603,7 @@ mod tests {
     #[test]
     fn hero_box_yields_to_stacked_when_the_draft_needs_its_rows() {
         // 26 rows fit the 11-row box beside a one-line prompt, not beside a 13-row draft
-        let area = Rect::new(0, 0, 90, 26);
+        let area = Rect::new(0, 0, 100, 26);
         let input = |prompt_height| WelcomeLayoutInput {
             content_area: area,
             menu_height: 4,
@@ -3579,8 +3615,8 @@ mod tests {
         assert_eq!(max, 13);
         let tall = WelcomeLayout::compute(input(Some(max)));
         assert!(!tall.has_hero_box());
-        // Compact logo 5 + gap 1 + menu 4 + flex 1 + prompt 13 + version 2 = 26 fits exactly
-        assert_eq!(tall.logo_tier, LogoTier::Compact);
+        // Compact logo 7 + gap 1 + menu 4 + flex 1 + prompt 13 + version 2 = 28 overflows 26, so the logo yields
+        assert_eq!(tall.logo_tier, LogoTier::Hidden);
         assert_places_every_row(&tall, &input(Some(max)));
     }
 
@@ -3596,12 +3632,12 @@ mod tests {
         };
         let one_line = WelcomeLayout::compute(input(None));
         assert_eq!(one_line.logo_tier, LogoTier::Compact);
-        // Compact logo 5 + gap 1 + menu 4 + flex 1 + prompt + version 2 = 13 + prompt: fits up to a 9-row draft
-        // The one-line layout has a 5-row flex gap, so the first 4 extra rows move nothing; the next two shift the column up
-        for extra in 1..=6u16 {
+        // Compact logo 7 + gap 1 + menu 4 + flex 1 + prompt + version 2 = 15 + prompt: fits up to a 7-row draft
+        // The one-line layout has slack for 3 extra rows before the column moves; the fourth shifts it up
+        for extra in 1..=4u16 {
             let layout = WelcomeLayout::compute(input(Some(PROMPT_HEIGHT + extra)));
             assert_eq!(layout.logo_tier, LogoTier::Compact, "{extra} extra rows");
-            if extra <= 4 {
+            if extra <= 3 {
                 assert_eq!(
                     layout.logo, one_line.logo,
                     "{extra} extra rows: the logo holds still"
@@ -3613,7 +3649,7 @@ mod tests {
             } else {
                 assert_eq!(
                     layout.logo.y,
-                    one_line.logo.y - (extra - 4),
+                    one_line.logo.y - (extra - 3),
                     "{extra} extra rows"
                 );
             }
@@ -3624,6 +3660,22 @@ mod tests {
         let tall = WelcomeLayout::compute(input(Some(max)));
         assert_eq!(tall.logo_tier, LogoTier::Hidden);
         assert_places_every_row(&tall, &input(Some(max)));
+    }
+
+    /// 80x24, the most common terminal size, leaves a 21-row content area: the compact mark shows there, ahead of the in-screen changelog.
+    #[test]
+    fn eighty_by_twenty_four_shows_the_compact_mark() {
+        let input = || WelcomeLayoutInput {
+            content_area: Rect::new(0, 0, 80, 21),
+            menu_height: 4,
+            changelog_height: 5,
+            ..Default::default()
+        };
+        let layout = WelcomeLayout::compute(input());
+        assert!(!layout.has_hero_box());
+        assert_eq!(layout.logo_tier, LogoTier::Compact);
+        assert_eq!(layout.logo.height, LogoTier::Compact.rows());
+        assert_places_every_row(&layout, &input());
     }
 
     /// 80x33: the full logo fits beside every draft up to the cap, so it never steps down.
@@ -3686,7 +3738,7 @@ mod tests {
     /// A draft that no longer fits beside the full logo steps the reserved rows AND the painted art down together.
     #[test]
     fn stacked_logo_art_matches_the_rows_reserved_for_a_tall_draft() {
-        // Full logo 7 + gap 1 + menu 4 + flex 1 + prompt + version 2 = 15 + prompt: 26 rows fit an 11-row draft under the full logo; 13 rows need the compact one
+        // Full logo 7 + gap 1 + menu 4 + flex 1 + prompt + version 2 = 15 + prompt: 26 rows fit an 11-row draft under the full logo; 12 rows need the compact one
         let area = Rect::new(0, 0, 60, 26);
         let input = |prompt_height| WelcomeLayoutInput {
             content_area: area,
@@ -3698,11 +3750,11 @@ mod tests {
         assert_eq!(one_line.logo_tier, LogoTier::Full);
         assert_eq!(one_line.logo.height, logo::full_logo_line_count());
 
-        let tall = WelcomeLayout::compute(input(Some(13)));
+        let tall = WelcomeLayout::compute(input(Some(12)));
         assert_eq!(tall.logo_tier, LogoTier::Compact);
         assert_eq!(tall.logo.height, logo::compact_logo_line_count());
         assert_eq!(tall.logo.height, tall.logo_tier.rows());
-        assert_places_every_row(&tall, &input(Some(13)));
+        assert_places_every_row(&tall, &input(Some(12)));
     }
 
     #[test]
@@ -3786,17 +3838,28 @@ mod tests {
         }
     }
 
-    /// Rows of the painted buffer that hold braille logo art.
+    /// Rows of the painted buffer that hold logo art: the wordmark's block elements.
     fn painted_logo_rows(buf: &Buffer) -> u16 {
+        painted_logo_rows_outside(buf, None)
+    }
+
+    /// [`painted_logo_rows`] skipping the rows of `exclude` (a tall prompt box, whose border
+    /// shares glyph ranges with the art).
+    fn painted_logo_rows_outside(buf: &Buffer, exclude: Option<Rect>) -> u16 {
         let area = buf.area;
         (area.top()..area.bottom())
+            .filter(|&y| exclude.is_none_or(|r| y < r.top() || y >= r.bottom()))
             .filter(|&y| {
                 (area.left()..area.right()).any(|x| {
                     buf.cell((x, y))
                         .map(|c| c.symbol())
                         .unwrap_or("")
                         .chars()
-                        .any(|c| ('\u{2800}'..='\u{28FF}').contains(&c))
+                        .any(|c| {
+                            // upper half, lower half and full block: the wordmark's pixels,
+                            // which the prompt and box borders never use
+                            matches!(c, '\u{2580}' | '\u{2584}' | '\u{2588}')
+                        })
                 })
             })
             .count() as u16
@@ -3808,9 +3871,9 @@ mod tests {
         let auth = AuthState::Done;
         let trust = TrustState::Done;
         let params = render_params(&auth, &trust, None);
-        // 60 cols keeps the stacked layout; the top bar and margins take 3 rows, so 29 rows give the 26-row content area
-        // whose full logo fits beside an 11-row draft but not the 13-row cap
-        let area = Rect::new(0, 0, 60, 29);
+        // The splash's 21-row content area (24 rows less the margins and top bar) fits the full logo beside a one-line prompt
+        // An 8-line draft (a 10-row box) leaves room for the compact logo only
+        let area = Rect::new(0, 0, 60, 24);
         let mut picker = PickerState::default();
         let mut prompt = PromptWidget::new();
 
@@ -3818,16 +3881,19 @@ mod tests {
         let _ = render_welcome(area, &mut buf, &params, &mut prompt, &mut picker);
         assert_eq!(painted_logo_rows(&buf), logo::full_logo_line_count());
 
-        prompt.set_text(&["line"; 30].join("\n"));
+        prompt.set_text(&["line"; 8].join("\n"));
         let mut buf = Buffer::empty(area);
         let tall = render_welcome(area, &mut buf, &params, &mut prompt, &mut picker);
-        assert_eq!(tall.prompt_rect.map(|r| r.height), Some(13));
-        assert_eq!(painted_logo_rows(&buf), logo::compact_logo_line_count());
+        assert_eq!(tall.prompt_rect.map(|r| r.height), Some(10));
+        assert_eq!(
+            painted_logo_rows_outside(&buf, tall.prompt_rect),
+            logo::compact_logo_line_count()
+        );
     }
 
     #[test]
     fn hero_box_inactive_on_narrow_terminal() {
-        // 80 cols is below the 90-col threshold.
+        // 80 cols is below the 100-col threshold.
         let area = Rect::new(0, 0, 80, 50);
         let layout = WelcomeLayout::compute(WelcomeLayoutInput {
             content_area: area,
@@ -3843,7 +3909,7 @@ mod tests {
 
     #[test]
     fn hero_box_boundary_at_min_width() {
-        let just_below = Rect::new(0, 0, 89, 50);
+        let just_below = Rect::new(0, 0, 99, 50);
         let layout = WelcomeLayout::compute(WelcomeLayoutInput {
             content_area: just_below,
             menu_height: 4,
@@ -3851,10 +3917,10 @@ mod tests {
         });
         assert!(
             !layout.has_hero_box(),
-            "hero box should be inactive at 89 cols"
+            "hero box should be inactive at 99 cols"
         );
 
-        let at_threshold = Rect::new(0, 0, 90, 50);
+        let at_threshold = Rect::new(0, 0, 100, 50);
         let layout = WelcomeLayout::compute(WelcomeLayoutInput {
             content_area: at_threshold,
             menu_height: 4,
@@ -3862,7 +3928,7 @@ mod tests {
         });
         assert!(
             layout.has_hero_box(),
-            "hero box should be active at 90 cols"
+            "hero box should be active at 100 cols"
         );
     }
 
@@ -3887,7 +3953,7 @@ mod tests {
     #[test]
     fn hero_box_inactive_on_short_terminal() {
         // 16 rows is one short of the 17 the box needs (11 box + 1 flex gap + 5 fixed-below), so it falls back to the stacked layout
-        let area = Rect::new(0, 0, 90, 16);
+        let area = Rect::new(0, 0, 100, 16);
         let layout = WelcomeLayout::compute(WelcomeLayoutInput {
             content_area: area,
             menu_height: 4,
@@ -3895,16 +3961,24 @@ mod tests {
         });
         assert!(
             !layout.has_hero_box(),
-            "hero box should be inactive at 90x16 (needs 17 rows)"
+            "hero box should be inactive at 100x16 (needs 17 rows)"
         );
     }
 
     #[test]
     fn hero_box_inactive_when_warning_would_overflow() {
-        // Regression: the box is forced to the full 7-row logo, so even a 3-item menu needs 11 box rows
-        // A startup warning (error_height = 2) pushes the total past height 19
-        // The gate must therefore fall back to the stacked layout instead of overflowing by a row
-        let area = Rect::new(0, 0, 90, 19);
+        // Regression: the box is forced to the full-height logo, so a startup warning (error_height = 2)
+        // can push the total one row past the content area. Size the area from the box's own minimum so
+        // the test tracks the logo's height: one row short, and the gate must fall back to the stacked
+        // layout instead of overflowing.
+        let probe = WelcomeLayoutInput {
+            content_area: Rect::new(0, 0, 100, 40),
+            error_height: 2,
+            menu_height: 3,
+            ..Default::default()
+        };
+        let needed = hero_box::min_content_height(&probe, 0, PROMPT_HEIGHT);
+        let area = Rect::new(0, 0, 100, needed - 1);
         let with_warning = WelcomeLayout::compute(WelcomeLayoutInput {
             content_area: area,
             error_height: 2,
@@ -3983,9 +4057,10 @@ mod tests {
 
     #[test]
     fn hero_box_height_accounts_for_borders_and_padding() {
-        // At h >= 26, logo07 is used (7 lines). With menu_height=3:
-        // right_col = 2 + 0 + 0 + 1 + 3 = 6, inner = max(7, 6) = 7.
-        // hero_box_height = 2 (borders) + 2 (v_pad) + 7 = 11.
+        // At 100 cols the box shows the compact wordmark. With menu_height=3:
+        // right_col = 2 + 0 + 0 + 1 + 3 = 6, inner = max(logo, 6).
+        // hero_box_height = 2 (borders) + 2 (v_pad) + inner.
+        let expected = 2 + 2 + LogoTier::Compact.rows().max(6);
         let area = Rect::new(0, 0, 100, 50);
         let layout = WelcomeLayout::compute(WelcomeLayoutInput {
             content_area: area,
@@ -3993,7 +4068,7 @@ mod tests {
             ..Default::default()
         });
         assert!(layout.has_hero_box());
-        assert_eq!(layout.hero_box.height, 11);
+        assert_eq!(layout.hero_box.height, expected);
     }
 
     #[test]
@@ -4406,8 +4481,8 @@ the usual channels. "
         };
         let one_line = WelcomeLayout::compute(input(None));
         assert!(one_line.has_hero_box());
-        // title + one message line + the CTA's spacer and button rows
-        assert_eq!(one_line.hero_info.height, 4);
+        // title + two message lines (the column beside the wordmark wraps it) + the CTA's spacer and button rows
+        assert_eq!(one_line.hero_info.height, 5);
 
         let max = prompt_max_height(&input(None));
         let mut saw_stacked = false;
@@ -4641,6 +4716,54 @@ the usual channels. "
                     "height {height}: stacked slot dropped to 0 with budget {budget}"
                 );
             }
+        }
+    }
+
+    /// Per-frame cost of the welcome screen and of the wordmark alone, for comparing branches.
+    /// `cargo test --release -p xai-grok-pager --lib -- --ignored --nocapture welcome_render_cost`
+    #[test]
+    #[ignore = "timing; run in release with --ignored --nocapture"]
+    fn welcome_render_cost() {
+        use std::time::{Duration, Instant};
+        fn median(mut v: Vec<Duration>) -> Duration {
+            v.sort();
+            v[v.len() / 2]
+        }
+        let theme = crate::theme::Theme::groknight();
+        let logo_area = Rect::new(0, 0, 60, 10);
+        let mut buf = Buffer::empty(logo_area);
+        let t = Instant::now();
+        logo::render_full_logo(logo_area, &mut buf, &theme);
+        println!("RENDER_COST logo first frame {:?}", t.elapsed());
+        let mut samples = Vec::new();
+        for _ in 0..20_000 {
+            let mut buf = Buffer::empty(logo_area);
+            let t = Instant::now();
+            logo::render_full_logo(logo_area, &mut buf, &theme);
+            samples.push(t.elapsed());
+            std::hint::black_box(&buf);
+        }
+        println!("RENDER_COST logo frame median {:?}", median(samples));
+
+        let auth = AuthState::Done;
+        let trust = TrustState::Done;
+        let params = render_params(&auth, &trust, None);
+        for (w, h) in [(80u16, 24u16), (130, 36)] {
+            let area = Rect::new(0, 0, w, h);
+            let mut picker = PickerState::default();
+            let mut prompt = PromptWidget::new();
+            let mut samples = Vec::new();
+            for _ in 0..2_000 {
+                let mut buf = Buffer::empty(area);
+                let t = Instant::now();
+                let _ = render_welcome(area, &mut buf, &params, &mut prompt, &mut picker);
+                samples.push(t.elapsed());
+                std::hint::black_box(&buf);
+            }
+            println!(
+                "RENDER_COST welcome {w}x{h} frame median {:?}",
+                median(samples)
+            );
         }
     }
 }

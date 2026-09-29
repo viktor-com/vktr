@@ -902,7 +902,7 @@ mod tests {
     fn startup_auth_xai_api_key_not_first_still_requires_login() {
         use xai_grok_shell::agent::auth_method::{VKTR_COM_METHOD_ID, XAI_API_KEY_METHOD_ID};
         let methods = vec![
-            make_auth_method(VKTR_COM_METHOD_ID, "Grok", None),
+            make_auth_method(VKTR_COM_METHOD_ID, "vktr", None),
             make_auth_method(XAI_API_KEY_METHOD_ID, "xai.api_key", None),
         ];
         let (needs, _, _, _) = startup_auth_metadata(&methods);

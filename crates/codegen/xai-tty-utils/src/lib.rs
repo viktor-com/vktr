@@ -1808,8 +1808,21 @@ mod tests {
             .expect("read grandchild pid");
         let gc_pid: i32 = line.trim().parse().expect("parse grandchild pid");
 
-        let alive =
-            |pid: i32| nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None).is_ok();
+        // `kill(pid, 0)` still succeeds for a zombie, and whoever the orphan is reparented to
+        // (init, or a subreaper such as the harness that runs the whole workspace) reaps on its
+        // own schedule, so a process whose state is already `Z` counts as dead.
+        let alive = |pid: i32| {
+            nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None).is_ok()
+                && std::fs::read_to_string(format!("/proc/{pid}/stat"))
+                    .ok()
+                    .and_then(|stat| {
+                        stat.rsplit(')')
+                            .next()
+                            .and_then(|rest| rest.split_whitespace().next())
+                            .map(str::to_owned)
+                    })
+                    .is_none_or(|state| state != "Z")
+        };
         assert!(
             alive(gc_pid),
             "grandchild should be running before the kill"
@@ -1823,8 +1836,10 @@ mod tests {
             .expect("wait ok");
 
         // The grandchild (same group) must ALSO be reaped by the killpg — poll
-        // until gone (orphan → reparented to init → reaped → ESRCH).
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        // until gone (orphan → reparented to init → reaped → ESRCH). Reparenting and the
+        // reaper's wait are scheduled by the kernel, so under a full workspace test run on a
+        // loaded host this took longer than five seconds; the bound is generous, not lax.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
         while alive(gc_pid) && std::time::Instant::now() < deadline {
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }

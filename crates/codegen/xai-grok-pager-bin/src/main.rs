@@ -49,11 +49,16 @@ use xai_grok_shell::leader::{
 use xai_grok_telemetry::process_info::{
     Entrypoint, Interactivity, ProcessIdentity, ReleaseChannel, set_identity, set_release_channel,
 };
+mod acp_command;
 mod agent_command;
+mod launch;
+mod viktor_doctor;
+mod viktor_login;
 fn process_identity(command: Option<&Command>, is_interactive: bool) -> Option<ProcessIdentity> {
     use xai_grok_telemetry::process_info::LeaderMode::Standalone;
     let (entrypoint, interactivity) = match command {
         Some(Command::Agent(_)) => return None,
+        Some(Command::Acp(_)) => return None,
         Some(Command::Dashboard) => return None,
         Some(Command::Login { .. }) => (Entrypoint::Cli, Interactivity::Interactive),
         Some(
@@ -70,6 +75,7 @@ fn process_identity(command: Option<&Command>, is_interactive: bool) -> Option<P
             | Command::Setup { .. }
             | Command::Share(_)
             | Command::Wrap(_)
+            | Command::Launch(_)
             | Command::Export(_)
             | Command::Trace(_)
             | Command::Update { .. }
@@ -97,7 +103,8 @@ fn command_needs_pre_sandbox_policy_heal(command: Option<&Command>) -> bool {
         | Some(Command::Models)
         | Some(Command::Worktree(_)) => true,
         Some(
-            Command::Inspect { .. }
+            Command::Acp(_)
+            | Command::Inspect { .. }
             | Command::Doctor(_)
             | Command::Leader(_)
             | Command::Logout
@@ -110,6 +117,7 @@ fn command_needs_pre_sandbox_policy_heal(command: Option<&Command>) -> bool {
             | Command::Setup { .. }
             | Command::Share(_)
             | Command::Wrap(_)
+            | Command::Launch(_)
             | Command::Export(_)
             | Command::Trace(_)
             | Command::Update { .. }
@@ -297,7 +305,7 @@ async fn run_setup_command(json: bool) {
                 println!("{out}");
                 if !report.configured {
                     eprintln!(
-                        "Your team doesn't have a managed configuration yet. A team admin can set one up at console.x.ai."
+                        "Your team doesn't have a managed configuration yet; ask a team admin to set one up."
                     );
                 }
             }
@@ -312,7 +320,7 @@ async fn run_setup_command(json: bool) {
         SetupOutcome::Installed => eprintln!("Applied managed configuration."),
         SetupOutcome::NothingConfigured => {
             eprintln!(
-                "Your team doesn't have a managed configuration yet. A team admin can set one up at console.x.ai."
+                "Your team doesn't have a managed configuration yet; ask a team admin to set one up."
             );
         }
         SetupOutcome::Skipped => {
@@ -609,7 +617,7 @@ async fn run_workspace_mgmt(args: WorkspaceMgmtArgs) -> Result<()> {
         WorkspaceGate::Unknown => {
             anyhow::bail!(
                 "Could not load your settings for `grok workspace`. Check your \
-             network connection (run `grok login` if you are signed out), then \
+             network connection (run `vktr login` if you are signed out), then \
              try again."
             )
         }
@@ -708,7 +716,7 @@ async fn spawn_and_connect_leader(
     if !use_leader {
         anyhow::bail!(
             "`{}` requires leader mode ({}).\n\
-             Enable it with `[cli] use_leader = true` in ~/.grok/config.toml, or pass --leader.",
+             Enable it with `[cli] use_leader = true` in ~/.vktr/config.toml, or pass --leader.",
             door.name,
             door.leader_mode_reason
         );
@@ -718,7 +726,7 @@ async fn spawn_and_connect_leader(
         agent_config.login_device_flow,
         agent_config.endpoints.proxy_url(),
         false,
-        Some("No cached credentials found. Run `grok login` first."),
+        Some("No cached credentials found. Run `vktr login` first."),
     )
     .await?;
     let env_urls = LeaderEnvUrls::from(&agent_config.grok_com_config);
@@ -1733,7 +1741,7 @@ fn flag_dashboard_at_startup_if_requested(args: &mut PagerArgs) -> Result<()> {
     if !xai_grok_pager::views::dashboard::dashboard_enabled() {
         anyhow::bail!(
             "the Agent Dashboard is disabled. Enable it by removing \
-             `[dashboard] enabled = false` from ~/.grok/config.toml and \
+             `[dashboard] enabled = false` from ~/.vktr/config.toml and \
              unsetting VKTR_AGENT_DASHBOARD=0."
         );
     }
@@ -2020,6 +2028,11 @@ fn dispatch_doctor_if_requested(args: &PagerArgs) -> bool {
         eprintln!("Error: {error:#}");
         std::process::exit(1);
     }
+    // The terminal report above is upstream's; the Viktor setup is what a first run needs.
+    if !doctor_args.json && doctor_args.command.is_none() {
+        xai_grok_extra_ca::ensure_default_crypto_provider();
+        viktor_doctor::print_report();
+    }
     true
 }
 fn main() {
@@ -2037,6 +2050,10 @@ fn main() {
     let args = PagerArgs::parse_cli();
     if dispatch_version_if_requested(&args) || dispatch_doctor_if_requested(&args) {
         return;
+    }
+    // Dispatched here so that nothing else can write to stdout: it carries the ACP wire.
+    if let Some(Command::Acp(acp_args)) = &args.command {
+        std::process::exit(acp_command::run(acp_args));
     }
     xai_grok_pager_minimal::install();
     #[cfg(all(feature = "test-seams", debug_assertions))]
@@ -2063,7 +2080,7 @@ fn main() {
         eprintln!("Couldn't start vktr: {e}");
         eprintln!();
         eprintln!(
-            "Update Grok to a version the policy allows, or ask your administrator \
+            "Update vktr to a version the policy allows, or ask your administrator \
              to fix the managed requirements."
         );
         std::process::exit(2);
@@ -2079,7 +2096,7 @@ fn main() {
     if xai_grok_shell::util::config::load_crash_handler_enabled_sync() {
         let crash_dir = xai_grok_shell::util::grok_home::grok_home().join("crash");
         if let Some(report) = xai_crash_handler::check_previous_crash(&crash_dir) {
-            eprintln!("Grok crashed during your last session.");
+            eprintln!("vktr crashed during your last session.");
             eprintln!("  Signal:  {}", report.signal_name);
             eprintln!("  Version: {}", report.app_version);
             eprintln!("  Report:  {}", report.report_path.display());
@@ -2115,6 +2132,12 @@ fn main() {
     if let Err(e) = result {
         xai_tty_utils::restore_native_stderr();
         finalize_span_profile();
+        if e.downcast_ref::<xai_grok_pager::headless::ErrorAlreadyReported>()
+            .is_some()
+        {
+            drop(_sentry_guard);
+            std::process::exit(1);
+        }
         let report = match e.downcast_ref::<xai_grok_pager::app::StartupFailure>() {
             Some(startup) => startup.user_report(),
             None => format!("Error: {e:#}"),
@@ -2134,6 +2157,9 @@ async fn async_main(mut args: PagerArgs) -> Result<()> {
     }
     if let Some(Command::Wrap(ref wrap_args)) = args.command {
         return xai_grok_pager::wrap_cmd::run(wrap_args);
+    }
+    if let Some(Command::Launch(ref launch_args)) = args.command {
+        return launch::run(launch_args).await;
     }
     let is_interactive = args.command.is_none()
         && args.single.is_none()
@@ -2205,6 +2231,9 @@ async fn async_main(mut args: PagerArgs) -> Result<()> {
     let update_config = build_update_config();
     if let Some(command) = args.command.take() {
         match command {
+            // Normally dispatched in `main` before any other start-up work, so that stdout
+            // carries only the ACP wire. Kept here so the match stays exhaustive.
+            Command::Acp(ref acp_args) => std::process::exit(acp_command::run(acp_args)),
             Command::Version { json } => {
                 if json {
                     let payload = serde_json::json!({
@@ -2372,40 +2401,71 @@ async fn async_main(mut args: PagerArgs) -> Result<()> {
                 .await;
             }
             Command::Login {
+                api_key,
                 legacy: _,
                 oauth,
                 device_auth,
-                devbox,
+                devbox: _,
             } => {
                 init_tracing_simple("cli");
-                let _otel_guard = xai_grok_telemetry::otel_layer::otel_guard();
+                if oauth || device_auth {
+                    eprintln!(
+                        "vktr authenticates with a Viktor API key; browser and device-code login are not available.\n\
+                         Run `vktr login` or set VIKTOR_API_KEY."
+                    );
+                    xai_grok_shell::instrumentation::finalize_and_exit(2);
+                }
                 let config = xai_grok_shell::config::load_agent_config_disk_only()
                     .map_err(|e| anyhow::anyhow!("Failed to create agent config: {e}"))?;
-                let authenticated = xai_grok_login::run_cli_login(
-                    config.grok_com_config.clone(),
-                    config.login_device_flow,
-                    config.endpoints.proxy_url(),
-                    oauth,
-                    device_auth,
-                    devbox,
-                    |auth_manager| {
-                        xai_grok_shell::agent::init::update_telemetry_config(&config, auth_manager)
-                    },
-                )
-                .await?;
-                xai_grok_shell::agent::init::apply_post_login_config(authenticated).await?;
-                println!();
+                let base_url = config.endpoints.resolve_viktor_base_url();
+                let given = api_key
+                    .map(|k| k.trim().to_owned())
+                    .filter(|k| !k.is_empty());
+                let given = match given {
+                    Some(key) => Some(key),
+                    None => viktor_login::read_api_key_from_user()?,
+                };
+                let Some(key) = given else {
+                    eprintln!(
+                        "No API key entered. Create one in Viktor (scope chat:completions), then run \
+                         `vktr login` and paste it, or export VIKTOR_API_KEY.\nEndpoint: {base_url}"
+                    );
+                    xai_grok_shell::instrumentation::finalize_and_exit(1);
+                };
+                match viktor_login::verify_api_key(&base_url, &key).await {
+                    Ok(models) => println!(
+                        "Verified against {base_url} (models: {})",
+                        models.join(", ")
+                    ),
+                    Err(e) => {
+                        eprintln!("Key check against {base_url} failed: {e:#}");
+                        xai_grok_shell::instrumentation::finalize_and_exit(1);
+                    }
+                }
+                let path = viktor_login::save_api_key(&key)?;
+                println!("Saved to {} as [model.viktor] api_key.", path.display());
                 xai_grok_shell::instrumentation::finalize_and_exit(0);
             }
             Command::Logout => {
                 init_tracing_simple("cli");
-                let config = xai_grok_shell::config::load_agent_config_disk_only()
-                    .map_err(|e| anyhow::anyhow!("Failed to create agent config: {e}"))?;
-                xai_grok_shell::agent::init::run_cli_logout(&config.grok_com_config)?;
+                match viktor_login::remove_saved_api_key()? {
+                    Some(path) => {
+                        println!("Removed the saved Viktor API key from {}.", path.display())
+                    }
+                    None => println!("No saved Viktor API key."),
+                }
+                if xai_grok_login::auth_method::has_xai_api_key_env() {
+                    println!(
+                        "VIKTOR_API_KEY is still set in this shell; unset it to sign out completely."
+                    );
+                }
                 xai_grok_shell::instrumentation::finalize_and_exit(0);
             }
             Command::Wrap(ref wrap_args) => {
                 return xai_grok_pager::wrap_cmd::run(wrap_args);
+            }
+            Command::Launch(ref launch_args) => {
+                return launch::run(launch_args).await;
             }
             Command::Completions { shell } => {
                 xai_grok_pager::completions_cmd::run(shell);
@@ -2417,10 +2477,17 @@ async fn async_main(mut args: PagerArgs) -> Result<()> {
             }
         }
     }
+    // `cmd | vktr -p "explain"` sends the piped text along; `echo hi | vktr -p` makes it the prompt.
+    let piped = if args.single.is_some() {
+        xai_grok_pager::headless::read_piped_stdin()
+    } else {
+        None
+    };
     let headless_prompt = xai_grok_pager::headless::HeadlessPrompt::from_args(
         args.single.as_deref(),
         args.prompt_json.as_deref(),
         args.prompt_file.as_deref(),
+        piped.as_deref(),
     )?;
     if headless_prompt.is_some() || args.memory_flush {
         if args.memory_flush
@@ -2447,6 +2514,9 @@ async fn async_main(mut args: PagerArgs) -> Result<()> {
             .as_deref()
             .map(xai_grok_pager::headless::parse_json_schema)
             .transpose()?;
+        if args.json {
+            args.output_format = xai_grok_pager::headless::OutputFormat::Json;
+        }
         if json_schema.is_some()
             && args.output_format == xai_grok_pager::headless::OutputFormat::Plain
         {
@@ -2522,9 +2592,9 @@ async fn async_main(mut args: PagerArgs) -> Result<()> {
         Ok(true) => {
             let adopted = bg_update_wait.lock().await.take();
             if finish_update_on_exit(adopted, &update_config).await {
-                eprintln!("Update installed. Run `grok` to start.");
+                eprintln!("Update installed. Run `vktr` to start.");
             } else {
-                eprintln!("Update did not complete. Run `grok update` to retry.");
+                eprintln!("Update did not complete. Run `vktr update` to retry.");
             }
             Ok(())
         }
@@ -2602,15 +2672,11 @@ fn build_update_config() -> UpdateConfig {
     config
 }
 /// Central gate for auto-update checks; add new suppression rules here, not at call sites.
+/// vktr never self-updates from a vendor endpoint; updates come from the package manager or
+/// the install script. Kept as a function so the call sites stay identical to upstream.
 fn should_check_for_updates(no_auto_update_flag: bool) -> bool {
-    if cfg!(debug_assertions) {
-        return false;
-    }
-    if no_auto_update_flag {
-        return false;
-    }
-    !std::env::var_os("VKTR_DISABLE_AUTOUPDATER")
-        .is_some_and(|v| env_flag_enabled(&v.to_string_lossy()))
+    let _ = no_auto_update_flag;
+    false
 }
 /// Gate for the stdio agent's background auto-update: only the direct stdio agent, from the managed install.
 /// Other modes update in `run_agent_command`.
@@ -2620,7 +2686,9 @@ fn stdio_auto_update_enabled(
     updates_enabled: bool,
     managed_install: bool,
 ) -> bool {
-    is_stdio && !use_leader && updates_enabled && managed_install
+    // vktr: background self-update is disabled in every mode (see should_check_for_updates).
+    let _ = (is_stdio, use_leader, updates_enabled, managed_install);
+    false
 }
 /// True when `exe` is the binary `<grok_home>/bin/grok` resolves to, the install that adopts a staged update on
 /// respawn. Both sides are canonicalized; any failure reports unmanaged and skips the update. The npm shim
@@ -2680,6 +2748,45 @@ async fn run_update_command(
     if json && !check {
         anyhow::bail!("--json requires --check");
     }
+    // vktr has no update channel of its own yet, and upstream's would install Grok Build over it.
+    // Say how to update instead, without touching the network.
+    let _ = (
+        force_reinstall,
+        &version,
+        channel_switch,
+        trigger,
+        base_update_config,
+    );
+    let current = env!("CARGO_PKG_VERSION");
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "currentVersion": current,
+                "updateAvailable": serde_json::Value::Null,
+                "selfUpdate": false,
+                "how": "rerun the installer you installed vktr with (README, Install)",
+            })
+        );
+    } else {
+        println!(
+            "vktr {current} does not update itself. To update, rerun the installer you used \
+             (README, \"Install\"), or `sh install.sh --from-source` in a checkout."
+        );
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+async fn run_upstream_update_command(
+    check: bool,
+    json: bool,
+    force_reinstall: bool,
+    version: Option<String>,
+    channel_switch: Option<&str>,
+    trigger: auto_update::CliUpdateTrigger,
+    base_update_config: &UpdateConfig,
+) -> Result<()> {
     let mut update_config = base_update_config.clone();
     if check {
         if version.is_some() {
@@ -2699,7 +2806,7 @@ async fn run_update_command(
         );
     }
     let telemetry_cfg = xai_grok_shell::config::load_agent_config_disk_only()
-        .map_err(|e| tracing::warn!("grok update: telemetry init skipped (agent config: {e})"))
+        .map_err(|e| tracing::warn!("vktr update: telemetry init skipped (agent config: {e})"))
         .ok();
     if let Some(agent_cfg) = telemetry_cfg {
         let auth_manager =
@@ -2794,8 +2901,8 @@ mod tests {
     #[test]
     fn embedded_agent_commands_heal_managed_policy_before_sandboxing() {
         for args in [
-            vec!["grok"],
-            vec!["grok", "agent", "stdio"],
+            vec!["vktr"],
+            vec!["vktr", "agent", "stdio"],
             vec!["vktr", "dashboard"],
             vec!["vktr", "models"],
             vec!["vktr", "worktree", "list"],
@@ -3087,7 +3194,7 @@ mod tests {
         std::fs::create_dir_all(home.join("bin")).unwrap();
         std::fs::create_dir_all(home.join("downloads")).unwrap();
         assert!(!is_managed_install(
-            Some(home.join("bin").join("grok")),
+            Some(home.join("bin").join("vktr")),
             &home
         ));
         assert!(!is_managed_install(None, &home));
@@ -3108,26 +3215,27 @@ mod tests {
         assert!(!is_managed_install(Some(pinned), &home));
         let _ = std::fs::remove_dir_all(&home);
     }
-    /// Pins the gate composition; a dropped conjunct fails its named case.
+    /// vktr never self-updates: the gate is false for every input, including the one
+    /// upstream treated as the "all conjuncts hold" case.
     #[test]
-    fn stdio_auto_update_requires_direct_stdio_enabled_and_managed() {
-        assert!(stdio_auto_update_enabled(true, false, true, true));
-        assert!(
-            !stdio_auto_update_enabled(true, true, true, true),
-            "leader bridge"
-        );
-        assert!(
-            !stdio_auto_update_enabled(false, false, true, true),
-            "non-stdio"
-        );
-        assert!(
-            !stdio_auto_update_enabled(true, false, false, true),
-            "updates off"
-        );
-        assert!(
-            !stdio_auto_update_enabled(true, false, true, false),
-            "pinned binary"
-        );
+    fn stdio_auto_update_is_always_off() {
+        for is_stdio in [false, true] {
+            for use_leader in [false, true] {
+                for updates_enabled in [false, true] {
+                    for managed in [false, true] {
+                        assert!(
+                            !stdio_auto_update_enabled(
+                                is_stdio,
+                                use_leader,
+                                updates_enabled,
+                                managed
+                            ),
+                            "stdio={is_stdio} leader={use_leader} updates={updates_enabled} managed={managed}"
+                        );
+                    }
+                }
+            }
+        }
     }
     use clap::Parser as _;
     /// `vktr dashboard` flags the startup hook without forcing leader mode.

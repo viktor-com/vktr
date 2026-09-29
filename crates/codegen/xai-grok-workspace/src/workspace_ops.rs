@@ -1858,7 +1858,7 @@ mod tests {
             session_branch: "conv/1".into(),
             repo_backend: None,
         }]);
-        std::fs::create_dir_all(tmp.path().join(".grok")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".vktr")).unwrap();
         std::fs::write(
             tmp.path()
                 .join(xai_grok_workspace_types::rpc::repos::REPOS_MANIFEST_RELATIVE_PATH),
@@ -1910,7 +1910,7 @@ mod tests {
             session_branch: "conv/1".into(),
             repo_backend: None,
         }]);
-        std::fs::create_dir_all(sandbox_ws.join(".grok")).unwrap();
+        std::fs::create_dir_all(sandbox_ws.join(".vktr")).unwrap();
         std::fs::write(
             sandbox_ws.join(xai_grok_workspace_types::rpc::repos::REPOS_MANIFEST_RELATIVE_PATH),
             one.to_json_bytes().unwrap(),

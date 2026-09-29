@@ -728,7 +728,7 @@
             &RetryState::Failed {
                 error_type: "legacy_auth".into(),
                 message: "Unauthorized (401) ... deprecated authentication method (WebLogin) ... \
-                          run `grok logout` then `grok login`"
+                          run `vktr logout` then `vktr login`"
                     .into(),
             },
             &mut session,
@@ -759,10 +759,8 @@
             }) => {
                 assert_eq!(status, Some(500));
                 assert_eq!(headline, "Server error (500)");
-                assert_eq!(
-                    detail,
-                    "Something went wrong on our side. Wait a minute and send again."
-                );
+                // vktr surfaces the server's own text for a 500, never a generic apology.
+                assert_eq!(detail, "upstream exploded");
             }
             other => panic!("expected RequestFailed, got {other:?}"),
         }

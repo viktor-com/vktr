@@ -30,6 +30,7 @@ mod span_timing;
 pub mod stream;
 mod stream_classify;
 pub mod types;
+mod viktor_continuation;
 
 // Public re-exports: the API consumers see
 pub use actor::SamplerActor;

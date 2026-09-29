@@ -1025,7 +1025,7 @@ mod tests {
             "OBJECTIVE:\ndo X\n\n\
              CHANGES_FILE: /tmp/goal-classifier-abc-1.patch\n\n\
              CHANGED_FILES:\n- js/main.js\n\n\
-             PLAN_FILE: /home/u/.grok/sessions/s1/goal/plan.md\n\n\
+             PLAN_FILE: /home/u/.vktr/sessions/s1/goal/plan.md\n\n\
              PLAN_CHANGES: (none)\n\n\
              FINAL_RESPONSE:\nI did it.\n",
         );

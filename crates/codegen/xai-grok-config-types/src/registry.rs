@@ -116,7 +116,7 @@ pub const FEATURES: &[FeatureSpec] = &[
         key: "session_recap",
         path: "features.session_recap",
         env: "VKTR_SESSION_RECAP",
-        default_enabled: true,
+        default_enabled: false,
         remote: Some(|settings| settings.session_recap),
     },
     FeatureSpec {
@@ -164,7 +164,7 @@ pub const FEATURES: &[FeatureSpec] = &[
         key: "turn_summary",
         path: "features.turn_summary",
         env: "VKTR_TURN_SUMMARY",
-        default_enabled: true,
+        default_enabled: false,
         remote: Some(|settings| settings.turn_summary),
     },
     FeatureSpec {

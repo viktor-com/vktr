@@ -2332,6 +2332,13 @@ pub(crate) fn execute(
                 });
             meta.auth_abort_handle = Some((request_seq, abort_handle));
         }
+        Effect::SaveViktorKey { request_seq, key } => {
+            let tx = acp_tx.clone();
+            let abort_handle = tasks.spawn(async move {
+                helpers::save_viktor_key_and_authenticate(&tx, request_seq, key).await
+            });
+            meta.auth_abort_handle = Some((request_seq, abort_handle));
+        }
         Effect::PollAuthUrl { request_seq } => {
             let tx = acp_tx.clone();
             let abort_handle = tasks

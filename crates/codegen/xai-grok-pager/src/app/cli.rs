@@ -3,11 +3,34 @@ use clap::{ArgAction, Parser, Subcommand, ValueHint};
 use clap_complete::Shell;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+/// Arguments for `vktr acp`.
+#[derive(Debug, Clone, Default, clap::Args)]
+pub struct AcpArgs {
+    /// Print the editor configuration that runs `vktr acp` (with this binary's path) and exit
+    #[arg(long, value_name = "EDITOR", value_parser = ["zed", "jetbrains"])]
+    pub print_config: Option<String>,
+}
 /// Top-level commands for the pager binary.
 #[derive(Debug, Clone, Subcommand)]
 pub enum Command {
     /// Run vktr without the interactive UI
     Agent(Box<AgentArgs>),
+    /// Serve Viktor to an editor over the Agent Client Protocol (Zed, JetBrains IDEs) on stdio
+    #[command(long_about = "\
+Serve Viktor to an editor over the Agent Client Protocol, on stdio.
+
+Viktor works in its own cloud sandbox with your team's tools. When the editor offers them, Viktor
+can also read your workspace, write files and run commands through the editor, which asks you
+before every write or command (VKTR_ACP_EDITOR_TOOLS=0 turns this off). One editor session is one
+Viktor thread and survives restarts (session/load), so follow-up prompts keep Viktor's context.
+
+Needs a Viktor API key: export VIKTOR_API_KEY, or run `vktr login`.
+
+Set up an editor: `vktr acp --print-config zed` (or `jetbrains`) prints the snippet to paste.
+
+This is not `vktr agent stdio`, which serves vktr's own local coding agent over the same protocol.
+")]
+    Acp(AcpArgs),
     /// Show the configuration vktr discovers for this directory
     Inspect {
         /// Emit machine-readable JSON output.
@@ -18,21 +41,25 @@ pub enum Command {
     Doctor(crate::doctor_cmd::DoctorArgs),
     /// Manage running leader processes
     Leader(LeaderMgmtArgs),
-    /// Sign out and clear cached credentials
+    /// Remove the Viktor API key saved by `vktr login`
     Logout,
-    /// Sign in to vktr
+    /// Verify a Viktor API key and save it; run `vktr login` and paste the key (input hidden)
     Login {
-        /// Ignored (kept for backwards compatibility). OAuth2 is now the only auth method.
+        /// Viktor public API key (scope `chat:completions`); saved to ~/.vktr/config.toml as `[model.viktor] api_key`. Without it the key is read from stdin, or prompted for with echo off, so it stays out of shell history.
+        #[arg(long = "api-key", env = "VKTR_LOGIN_API_KEY", hide_env_values = true)]
+        api_key: Option<String>,
+        /// Ignored (kept for backwards compatibility).
         #[arg(long, hide = true)]
         legacy: bool,
-        /// Use vktr OAuth via auth.x.ai.
-        #[arg(long = "oauth", alias = "oidc", conflicts_with_all = ["device_auth"])]
+        /// Refused: vktr has no browser login. Hidden, but still parsed so the refusal can say so.
+        #[arg(long = "oauth", alias = "oidc", conflicts_with_all = ["device_auth"], hide = true)]
         oauth: bool,
-        /// Use device-code authentication for headless/remote environments.
+        /// Refused: vktr has no device-code login. Hidden, but still parsed so the refusal can say so.
         #[arg(
             long = "device-auth",
-            visible_alias = "device-code",
-            conflicts_with_all = ["oauth"]
+            alias = "device-code",
+            conflicts_with_all = ["oauth"],
+            hide = true
         )]
         device_auth: bool,
         /// Authenticate for remote development environments (hidden).
@@ -52,9 +79,11 @@ pub enum Command {
     Sessions(crate::sessions_cmd::SessionsArgs),
     /// Print persisted token and cost usage for a session
     Usage(crate::usage_cmd::UsageArgs),
-    /// Fetch and install managed configuration
+    /// Fetch and install managed configuration. Hidden: it serves xAI team deployments, which a
+    /// Viktor install does not have.
+    #[command(hide = true)]
     Setup {
-        /// Print the fetched configuration as JSON instead of installing it; writes nothing to ~/.grok.
+        /// Print the fetched configuration as JSON instead of installing it; writes nothing to ~/.vktr.
         #[arg(long)]
         json: bool,
     },
@@ -75,15 +104,15 @@ clipboard (containers, SSH) and your terminal does not handle OSC 52 itself
 sync with your window size.
 
 Examples:
-  grok wrap docker exec -it my-container bash
-  grok wrap kubectl exec -it my-pod -- bash
+  vktr wrap docker exec -it my-container bash
+  vktr wrap kubectl exec -it my-pod -- bash
 
-See ~/.grok/README.md for more information.
+See ~/.vktr/README.md for more information.
 ")]
     Wrap(WrapArgs),
     /// Export a session transcript as Markdown
     Export(crate::export_cmd::ExportArgs),
-    /// Export or upload session trace data
+    /// Export a session trace to a local tar.gz
     Trace(crate::trace_cmd::TraceArgs),
     /// Check for updates or install a specific version
     Update {
@@ -122,6 +151,21 @@ See ~/.grok/README.md for more information.
         #[arg(long)]
         json: bool,
     },
+    /// Run a coding tool against a local OpenAI-compatible backend, or against Viktor with --viktor
+    #[command(long_about = "\
+Run a coding tool against a local OpenAI-compatible backend, or against the Viktor compat API.
+
+  vktr launch codex                                  first reachable backend, discovered model
+  vktr launch --backend ollama --model qwen3.5:4b opencode
+  vktr launch --backend http://host:8000 pi
+  vktr launch --config opencode                      print the wiring without starting the tool
+  vktr launch --viktor codex                         point codex at Viktor (needs VIKTOR_API_KEY)
+  vktr launch --viktor claude -p \"explain this repo\"
+
+Launch options go before the tool name; everything after it is passed to the tool unchanged. The tool
+runs from the current directory. If Harbor is installed, backend detection and start-up are delegated to
+`harbor launch`.")]
+    Launch(LaunchArgs),
     /// Generate shell completion scripts (bash, zsh, fish, powershell, ...)
     Completions {
         /// Target shell
@@ -142,6 +186,31 @@ See ~/.grok/README.md for more information.
     /// The dashboard shows every session, top-level and subagents.
     /// Disabled when `[dashboard].enabled = false` in `~/.vktr/config.toml` or when the `VKTR_AGENT_DASHBOARD=0` env var is set.
     Dashboard,
+}
+/// Arguments for `vktr launch`. Launch options go before the tool name; everything after it belongs to the tool.
+#[derive(Debug, clap::Args, Clone)]
+pub struct LaunchArgs {
+    /// Backend to use: a known local service (ollama, llamacpp, lmstudio, vllm, sglang, tabbyapi, mistralrs,
+    /// dmr, mlx, litellm) or a URL. Default: the first reachable one.
+    #[arg(long, value_name = "SERVICE|URL")]
+    pub backend: Option<String>,
+    /// Model to wire into the tool. Default: the first non-embedding model the backend lists.
+    #[arg(long, value_name = "MODEL")]
+    pub model: Option<String>,
+    /// Print the computed configuration (and write any config files) without starting the tool.
+    #[arg(long)]
+    pub config: bool,
+    /// Point the tool at the Viktor compat API instead of a local backend.
+    #[arg(long)]
+    pub viktor: bool,
+    /// Tool to run, followed by its own arguments (claude, codex, copilot, grok, hermes, mi, opencode, pi, pool, vktr).
+    #[arg(
+        required = true,
+        trailing_var_arg = true,
+        allow_hyphen_values = true,
+        value_name = "TOOL [ARGS]"
+    )]
+    pub tool_and_args: Vec<String>,
 }
 /// Arguments for the `wrap` subcommand: the command to run, then its args.
 #[derive(Debug, clap::Args, Clone)]
@@ -340,9 +409,10 @@ pub enum AgentCmd {
 /// WebSocket URL override arguments, used by headless / leader / serve modes.
 #[derive(Debug, clap::Args, Clone, Default)]
 pub struct HeadlessArgs {
-    #[arg(long = "grok-ws-origin")]
+    // Hidden: upstream's relay endpoints. Leaders spawned by vktr itself still pass them through.
+    #[arg(long = "grok-ws-origin", hide = true)]
     pub grok_ws_origin: Option<String>,
-    #[arg(long = "grok-ws-url")]
+    #[arg(long = "grok-ws-url", hide = true)]
     pub grok_ws_url: Option<String>,
 }
 /// Arguments for the `agent serve` subcommand.
@@ -380,7 +450,7 @@ pub struct LeaderArgs {
     /// Keep the leader running after the last client disconnects.
     #[arg(long)]
     pub no_exit_on_disconnect: bool,
-    /// Defer the grok.com relay WebSocket until the first headless IPC client registers.
+    /// Defer the relay WebSocket until the first headless IPC client registers.
     /// Without this flag the leader connects the relay eagerly at startup.
     /// Passed by leaders auto-spawned from interactive clients (TUI/IDE), which only need the relay if a headless client appears.
     #[arg(long)]
@@ -396,7 +466,20 @@ pub struct LeaderArgs {
 #[command(
     name = "vktr",
     version = xai_grok_version::full_version(),
-    about = "vktr TUI",
+    about = "vktr: Viktor in your terminal, a coding agent for the repo in front of you",
+    after_help = "\
+Quick start:
+  vktr login                       save your Viktor API key (paste it; input is hidden)
+  vktr                             interactive session in this directory
+  vktr \"fix the failing tests\"     start the session with a prompt
+  vktr -p \"summarize README.md\"    one answer on stdout, no UI (--json for JSON)
+  git diff | vktr -p \"review\"      piped input goes along as context
+  vktr -c                          continue the last session here
+  vktr acp                         serve Viktor to Zed or a JetBrains IDE
+  vktr launch --viktor codex       point another coding tool at Viktor
+
+Environment: VIKTOR_API_KEY, VIKTOR_BASE_URL, VKTR_HOME (~/.vktr), VKTR_FULL_TOOLSET=1.
+Docs: README.md, docs/acp.md",
     disable_version_flag = true,
     next_display_order = None,
     help_template = "\
@@ -467,12 +550,15 @@ pub struct PagerArgs {
         value_delimiter = ','
     )]
     pub deny_rules: Vec<String>,
-    /// Single-turn prompt. Prints the response to stdout and exits.
+    /// Single-turn prompt. Prints the response to stdout and exits. Piped input is sent along
+    /// (`git diff | vktr -p "review this"`); a bare `-p` takes the piped input as the prompt.
     #[clap(
         short = 'p',
         long = "single",
         alias = "print",
         value_name = "PROMPT",
+        num_args = 0..=1,
+        default_missing_value = "",
         conflicts_with_all = &["prompt_json",
         "prompt_file"]
     )]
@@ -500,6 +586,9 @@ pub struct PagerArgs {
     /// Output format for headless mode.
     #[clap(long = "output-format", value_enum, default_value = "plain")]
     pub output_format: OutputFormat,
+    /// Shorthand for `--output-format json`: print one JSON object with the reply, stop reason, session id and usage.
+    #[clap(long = "json", conflicts_with = "output_format")]
+    pub json: bool,
     /// Emit incremental `stream_event` lines (text/thinking deltas) alongside whole messages.
     /// Only affects `--output-format streaming-messages-json`.
     #[clap(long = "include-partial-messages")]

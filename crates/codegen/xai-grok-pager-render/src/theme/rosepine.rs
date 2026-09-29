@@ -110,6 +110,11 @@ impl Theme {
             md_code_bg: SURFACE,
             md_text: TEXT,
             link_fg: FOAM, // #9ccfd8, teal/cyan for dark bg
+
+            brand: IRIS,
+            brand_deep: SUBTLE,
+            brand_glint: rgb(255, 255, 255),
+            brand_gradient: [PINE, IRIS, LOVE, ROSE, GOLD],
         }
     }
 }

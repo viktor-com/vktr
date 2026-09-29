@@ -2,7 +2,7 @@
 
 Subagents are independent child sessions that handle tasks in parallel. Each subagent has its own context window, so the main agent can delegate work (research, implementation, testing, and code review) without consuming its own context. A subagent reports a summary back to the parent when it finishes.
 
-Subagents are enabled by default.
+Subagents are **off by default** in vktr, as part of its lean toolset (Viktor runs its own subagents server-side, and every tool schema is resent with each request). Turn them on with `VKTR_SUBAGENTS=1`, `[subagents] enabled = true`, or `VKTR_FULL_TOOLSET=1`.
 
 ---
 
@@ -255,7 +255,7 @@ For tasks that modify files, run a subagent in an isolated git worktree with `is
 - Its changes stay isolated from the parent until you merge them.
 - The subagent's result includes the worktree path.
 
-vktr manages worktrees through the `x.ai/git/worktree/*` extension methods, including an apply operation that merges changes back into the main working directory.
+vktr manages worktrees through the agent's `git/worktree/*` extension methods, including an apply operation that merges changes back into the main working directory.
 
 ---
 
@@ -271,7 +271,7 @@ explore = true                       # default -- omit to keep enabled
 plan = false                         # disable the plan subagent
 
 [subagents.models]
-explore = "grok-4.6"                 # route explore to a specific model
+explore = "local"                    # route explore to a specific model (a [model.<name>] key)
 ```
 
 Per-type model overrides apply for any parent. Without an override, a subagent inherits the parent's model.
@@ -288,7 +288,7 @@ Define custom roles with their own capability and model defaults:
 [subagents.roles.researcher]
 description = "Deep research agent"
 default_capability_mode = "read-only"
-model = "grok-4.6"
+model = "local"
 prompt_file = ".vktr/prompts/researcher.md"
 ```
 
@@ -325,7 +325,7 @@ Subagents appear in several places in the interactive TUI:
 
 When a subagent is spawned, a compact lifecycle block is added to the *parent's* scrollback:
 
-- `Subagent running: "do the thing" (Implementer · grok-4.6) · Thinking`
+- `Subagent running: "do the thing" (Implementer · viktor) · Thinking`
 - Or for background subagents: `Subagent started: "..."`
 
 While running, the block shows a live activity suffix (e.g. "Running: cargo test", "Compacting", "Retrying (2/3)") pulled from the child's turn tracker. The bullet animates (or is colored) according to state.

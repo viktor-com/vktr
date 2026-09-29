@@ -36,7 +36,11 @@ pub(crate) fn cli_base_urls() -> Vec<String> {
             tracing::warn!("VKTR_CLI_BASE_URL ignored: only loopback bases are honored");
         }
     }
-    CLI_BASE_URLS.iter().map(|s| (*s).to_owned()).collect()
+    // vktr is not published on upstream's channel: its hosts serve Grok Build, and an "update"
+    // from them would replace vktr with a different product. Only a loopback override (tests)
+    // is ever contacted; the constants stay for upstream diffs.
+    let _ = CLI_BASE_URLS;
+    Vec::new()
 }
 
 /// Parsed, not prefix-matched: `http://127.0.0.1:9@evil.com` starts with a
@@ -563,18 +567,18 @@ mod tests {
     #[test]
     fn test_version_from_versioned_binary_name() {
         let cases: &[(&str, Option<&str>)] = &[
-            ("grok-0.2.46-darwin-arm64", Some("0.2.46")),
-            ("grok-0.1.220-linux-x86_64", Some("0.1.220")),
-            ("grok-0.2.5-windows-x86_64.exe", Some("0.2.5")),
+            ("vktr-0.2.46-darwin-arm64", Some("0.2.46")),
+            ("vktr-0.1.220-linux-x86_64", Some("0.1.220")),
+            ("vktr-0.2.5-windows-x86_64.exe", Some("0.2.5")),
             // Pre-releases must round-trip whole
             // Truncating to "0.1.220" would make an alpha install masquerade as the release and mask updates from alpha to stable
-            ("grok-0.1.220-alpha.4-linux-x86_64", Some("0.1.220-alpha.4")),
-            ("grok-0.1.220-alpha.4", Some("0.1.220-alpha.4")), // npm layout
+            ("vktr-0.1.220-alpha.4-linux-x86_64", Some("0.1.220-alpha.4")),
+            ("vktr-0.1.220-alpha.4", Some("0.1.220-alpha.4")), // npm layout
             ("grok-pager-0.1.5-darwin-arm64", None),           // "pager" is not a version
-            ("grok-garbage-darwin-arm64", None),               // unparseable version
-            ("grok-0.2.46", Some("0.2.46")),                   // no platform suffix
+            ("vktr-garbage-darwin-arm64", None),               // unparseable version
+            ("vktr-0.2.46", Some("0.2.46")),                   // no platform suffix
             ("other-0.2.46-darwin-arm64", None),               // wrong prefix
-            ("grok-latest", None),                             // symlink alias, not a version
+            ("vktr-latest", None),                             // symlink alias, not a version
             ("vktr", None),                                    // bare name
             ("", None),
         ];

@@ -1,7 +1,7 @@
 //! `/docs` opens How-to Guides (in-TUI) or the online Build docs.
 //!
 //! Bare `/docs` opens the same DocPicker as command-palette "How-to Guides".
-//! `/docs web` opens https://docs.x.ai/build/overview in the browser.
+//! `/docs web` opens the same built-in guides: vktr has no web docs (upstream opened docs.x.ai).
 //! `/docs <title>` opens a single guide by title (case-insensitive).
 
 use crate::app::actions::Action;
@@ -10,7 +10,9 @@ use crate::slash::command::{
     AppCtx, ArgItem, CommandExecCtx, CommandResult, SlashCommand, slash_meta,
 };
 
-/// The online Build docs landing page, hardcoded like other TUI deep-links; docs.x.ai can redirect if the path moves.
+/// Upstream's online docs landing page. Unused in vktr (`/docs web` opens the built-in guides);
+/// kept so upstream diffs stay small.
+#[allow(dead_code)]
 pub const BUILD_DOCS_URL: &str = "https://docs.x.ai/build/overview";
 
 pub struct DocsCommand;
@@ -19,7 +21,7 @@ impl SlashCommand for DocsCommand {
     slash_meta! {
         name: "docs",
         aliases: ["howto", "guides"],
-        description: "Open How-to Guides or online Build docs",
+        description: "Open the built-in how-to guides",
         usage: "/docs [web|title]",
         takes_args: true,
         args_required: false,
@@ -27,20 +29,12 @@ impl SlashCommand for DocsCommand {
     }
 
     fn suggest_args(&self, _ctx: &AppCtx, _args_query: &str) -> Option<Vec<ArgItem>> {
-        let mut items = vec![
-            ArgItem {
-                display: "how-to".into(),
-                match_text: "how-to".into(),
-                insert_text: "how-to".into(),
-                description: "Browse in-TUI How-to Guides".into(),
-            },
-            ArgItem {
-                display: "web".into(),
-                match_text: "web".into(),
-                insert_text: "web".into(),
-                description: "Open docs.x.ai/build in the browser".into(),
-            },
-        ];
+        let mut items = vec![ArgItem {
+            display: "how-to".into(),
+            match_text: "how-to".into(),
+            insert_text: "how-to".into(),
+            description: "Browse in-TUI How-to Guides".into(),
+        }];
         items.extend(all_titles().map(|title| ArgItem {
             display: title.into(),
             match_text: title.into(),
@@ -56,7 +50,8 @@ impl SlashCommand for DocsCommand {
             return CommandResult::Action(Action::OpenHowtoGuides);
         }
         if is_web_arg(trimmed) {
-            return CommandResult::Action(Action::OpenUrl(BUILD_DOCS_URL.into()));
+            // The guides ship inside vktr; there is no web copy to open.
+            return CommandResult::Action(Action::OpenHowtoGuides);
         }
         match find_doc(trimmed) {
             Some(doc) => CommandResult::Action(Action::ShowReleaseNotes {
@@ -64,7 +59,7 @@ impl SlashCommand for DocsCommand {
                 content: doc.content.into(),
             }),
             None => CommandResult::Error(format!(
-                "Unknown docs target {trimmed:?}. Try /docs, /docs web, or a guide title (e.g. /docs Getting Started)."
+                "Unknown docs target {trimmed:?}. Try /docs, or a guide title (e.g. /docs Getting Started)."
             )),
         }
     }
@@ -143,15 +138,13 @@ mod tests {
     }
 
     #[test]
-    fn web_opens_build_docs_url() {
+    fn web_opens_the_built_in_guides_since_vktr_has_no_web_docs() {
         let models = ModelState::default();
         let mut ctx = make_ctx(&models);
         for args in ["web", "online", "browser"] {
             match DocsCommand.run(&mut ctx, args) {
-                CommandResult::Action(Action::OpenUrl(url)) => {
-                    assert_eq!(url, BUILD_DOCS_URL, "args={args:?}");
-                }
-                other => panic!("expected OpenUrl for args={args:?}, got {other:?}"),
+                CommandResult::Action(Action::OpenHowtoGuides) => {}
+                other => panic!("expected OpenHowtoGuides for args={args:?}, got {other:?}"),
             }
         }
     }
@@ -189,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn suggest_args_includes_web_and_titles() {
+    fn suggest_args_offers_guides_and_titles_but_no_web_link() {
         let models = ModelState::default();
         let cwd = std::path::Path::new(".");
         let ctx = AppCtx {
@@ -205,7 +198,7 @@ mod tests {
             current_title: None,
         };
         let items = DocsCommand.suggest_args(&ctx, "").expect("suggestions");
-        assert!(items.iter().any(|i| i.insert_text == "web"));
+        assert!(!items.iter().any(|i| i.insert_text == "web"));
         assert!(items.iter().any(|i| i.insert_text == "how-to"));
         assert!(items.iter().any(|i| i.insert_text == "Getting Started"));
     }

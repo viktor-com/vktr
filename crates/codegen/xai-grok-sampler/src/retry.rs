@@ -697,7 +697,7 @@ mod tests {
     fn classify_cloudflare_522_is_retryable() {
         let err = api_err(
             StatusCode::from_u16(522).unwrap(),
-            "Connection to Grok timed out or was interrupted. (HTTP 522).",
+            "Connection to vktr timed out or was interrupted. (HTTP 522).",
         );
         match classify_error(&err, 0, 15, RATE_LIMIT_RETRY_THRESHOLD) {
             RetryDecision::RetryWithClientRebuild { .. } => {}
@@ -714,7 +714,7 @@ mod tests {
         for should_retry in [None, Some(true)] {
             let err = SamplingError::Api {
                 status: StatusCode::from_u16(525).unwrap(),
-                message: "Secure connection to Grok failed. (HTTP 525).".into(),
+                message: "Secure connection to vktr failed. (HTTP 525).".into(),
                 model_metadata: None,
                 retry_after_secs: None,
                 should_retry,

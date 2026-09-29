@@ -121,7 +121,8 @@ fn is_figma_mcp_matches_name_and_host() {
     assert!(is_figma_mcp("figma", "https://example.com/mcp"));
     assert!(is_figma_mcp("Figma", "https://example.com/mcp"));
     assert!(is_figma_mcp("grok_com_figma", "https://example.com/mcp"));
-    assert!(is_figma_mcp("VKTR_COM_FIGMA", "https://example.com/mcp"));
+    // The managed-server prefix is the upstream literal `grok_com_`; the rebrand does not touch it.
+    assert!(is_figma_mcp("Grok_Com_Figma", "https://example.com/mcp"));
     assert!(is_figma_mcp("grok_com_FIGMA", "https://example.com/mcp"));
     assert!(is_figma_mcp("other", "https://mcp.figma.com/mcp"));
     assert!(is_figma_mcp("other", "https://figma.com/mcp"));

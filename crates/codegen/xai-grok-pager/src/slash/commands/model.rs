@@ -516,7 +516,8 @@ mod tests {
         let (id, info) = plain_model("grok-4.5", "Grok 4.5");
         state.available.insert(id.clone(), info);
         let mut ctx = dummy_exec_ctx(&state);
-        let result = ModelCommand.run(&mut ctx, "vktr 4.5");
+        // The catalog entry is xAI's model "Grok 4.5"; the query must match its display name.
+        let result = ModelCommand.run(&mut ctx, "Grok 4.5");
         match result {
             CommandResult::Action(Action::SetDefaultModel(resolved_id)) => {
                 assert_eq!(resolved_id, id);

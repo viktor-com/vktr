@@ -43,7 +43,7 @@ vktr stores each session in its own directory, grouped by working directory. It 
 
 ### Session titles
 
-The session title shown in the dashboard and `/resume` is generated automatically from the conversation. The prompt border shows a title only after a manual `/rename`, alongside the `Stashed` caption when a draft is stashed. Title generation starts right after your first prompt so a session always has a title, and then the title is regenerated from the whole conversation at a couple of early turns and frozen. This lets the title move past a vague first prompt to reflect what the session is really about, while staying stable afterward so you don't lose track of your sessions. A manual `/rename` always wins: once you rename a session, automatic generation never overrides it. Use `/rename --auto` to hand the title back to automatic generation.
+The session title shown in the dashboard and `/resume` is set automatically after your first prompt. By default vktr takes it from the first words of that prompt, without a model call, because each extra request to Viktor is a separate billed run. Set `VKTR_LLM_SESSION_TITLES=1` to have the model write titles instead (useful with a cheap local model). The prompt border shows a title only after a manual `/rename`, alongside the `Stashed` caption when a draft is stashed. A manual `/rename` always wins: once you rename a session, automatic generation never overrides it. Use `/rename --auto` to hand the title back to automatic generation.
 
 ---
 
@@ -174,6 +174,14 @@ The optional `context` argument lets you provide additional instructions about w
 
 vktr automatically compacts the conversation when the context window approaches its limit. You will see a notification when auto-compact triggers. The `context_window` setting on your model configuration controls when this threshold is reached.
 
+Auto-compaction is skipped for the built-in `viktor` model on the responses protocol: Viktor compacts its own threads server-side, and a client-side compaction would cost a billed run and move the session to a new Viktor thread (losing Viktor's sandbox state). `/compact` still works when you ask for it. Stateless protocols (`VIKTOR_API_BACKEND=chat_completions` or `messages`) and `VKTR_RESPONSES_CONTINUATION=0` compact as before; `VKTR_VIKTOR_CLIENT_COMPACTION=1` restores automatic compaction.
+
+### Viktor thread continuation
+
+On the default responses protocol, a vktr session is one Viktor thread. vktr sends `previous_response_id` with only the new input (the next message or tool results), so Viktor keeps its context and sandbox state. This holds across restarts: `--continue` and `--resume` pick up the same thread. If the history has diverged from what Viktor already has, vktr replays it in full, and if Viktor no longer has the thread, the history is replayed into a new one without an error. `VKTR_RESPONSES_CONTINUATION=0` switches to stateless replay.
+
+A prompt sent right after cancelling a turn waits for Viktor to stop the old run (about 15 seconds) instead of failing.
+
 ---
 
 ## The /session-info Command
@@ -188,7 +196,7 @@ This shows:
 
 - Session title (when set)
 - Shell version
-- Auth method (OAuth vs API key; API-key sessions also suggest `vktr login` for SuperGrok)
+- Auth method (an API key with Viktor)
 - Session ID
 - Working directory
 - Model (with a model hash for coding models)
@@ -249,7 +257,7 @@ await connection.request("session/load", {
 await connection.request("session/set_config_option", {
   sessionId,
   configId: "model",
-  value: { value: "grok-4.6" },
+  value: { value: "viktor" },
 });
 ```
 
@@ -296,7 +304,7 @@ Output is JSON with `sessionId`, `updatedAt`, `session`, and `turns`. A specific
 
 When working with subagents or session forks, vktr can create isolated git worktrees per session. Each worktree gets its own copy of the working directory, so file changes in one session do not affect another.
 
-Worktree sessions are managed internally through the `x.ai/git/worktree/*` extension methods. Key operations:
+Worktree sessions are managed internally through the agent's `git/worktree/*` extension methods (see [Agent mode](15-agent-mode.md#extension-methods)). Key operations:
 
 - **Create**: Create a new worktree for an isolated session
 - **Apply**: Merge worktree changes back into the main working directory

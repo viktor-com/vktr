@@ -313,7 +313,7 @@ mod tests {
             (
                 LspServerConfig::default(),
                 ConfigSource::Project {
-                    path: PathBuf::from("/repo/.grok/lsp.json"),
+                    path: PathBuf::from("/repo/.vktr/lsp.json"),
                 },
             ),
         );
@@ -322,7 +322,7 @@ mod tests {
             (
                 LspServerConfig::default(),
                 ConfigSource::User {
-                    path: PathBuf::from("/home/.grok/lsp.json"),
+                    path: PathBuf::from("/home/.vktr/lsp.json"),
                 },
             ),
         );

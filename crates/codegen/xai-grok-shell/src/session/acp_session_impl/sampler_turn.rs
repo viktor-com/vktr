@@ -90,6 +90,11 @@ pub(super) fn transient_retry_eligible(error: &xai_grok_sampler::SamplingErrorIn
             error.error_code,
             Some(xai_grok_sampling_types::ApiErrorCode::InvalidImage)
         )
+        // Viktor `run_failed`: the server already retried and a resend starts a second billed run
+        || error.error_code.as_ref().is_some_and(|code| {
+            code.as_str()
+                .eq_ignore_ascii_case(xai_grok_sampling_types::VIKTOR_RUN_FAILED_ERROR_CODE)
+        })
     {
         return false;
     }
@@ -1545,7 +1550,7 @@ impl SessionActor {
                 "{detailed_message}\n\n\
                  You are using a deprecated authentication method (WebLogin).\n\
                  This auth method is no longer supported and will cause errors.\n\n\
-                 To fix: run `grok update`, then `grok logout`, then `grok login` to re-authenticate with OAuth2.\n\n\
+                 To fix: run `vktr update`, then `vktr logout`, then `vktr login` to re-authenticate with OAuth2.\n\n\
                  Version: {client_version}"
             );
             self.log_terminal_failure("legacy_auth", error.status_code, &msg);

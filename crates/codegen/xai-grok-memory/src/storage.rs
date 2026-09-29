@@ -484,7 +484,7 @@ impl MemoryStorage {
                 &global_file,
                 "# Global Memory\n\
                  \n\
-                 > This file is automatically managed by Grok's memory system.\n\
+                 > This file is automatically managed by vktr's memory system.\n\
                  > You can also edit it manually — changes will be indexed on next session.\n\
                  \n\
                  ## Preferences\n\

@@ -1140,6 +1140,12 @@ fn devbox_genuine_reexec_applies_enforcement() {
     if skip_if_enforcement_unavailable() {
         return;
     }
+    // The devbox profile only has something to enforce on a devbox host, where `/data` exists
+    // (see requires_data_write_deny); elsewhere the re-exec plan is legitimately empty.
+    if !Path::new("/data").exists() {
+        eprintln!("skipping: not a devbox host (no /data)");
+        return;
+    }
     let (home, grok, workspace, _ch, _cg, _cw) = fixture_homes("devbox-genuine");
     let exe = std::env::current_exe().expect("current_exe");
     let mut cmd = Command::new(exe);

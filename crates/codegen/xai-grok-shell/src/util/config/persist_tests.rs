@@ -1435,7 +1435,7 @@ custom_unknown_key = 42
 fn project_slot_symlink(dir: &std::path::Path) -> (std::path::PathBuf, std::path::PathBuf) {
     let outside = dir.join("outside.toml");
     std::fs::write(&outside, "keep\n").unwrap();
-    let link = dir.join(".grok").join("config.toml");
+    let link = dir.join(".vktr").join("config.toml");
     std::fs::create_dir_all(link.parent().unwrap()).unwrap();
     std::os::unix::fs::symlink(&outside, &link).unwrap();
     (link, outside)

@@ -130,8 +130,13 @@ pub fn grove_wt_create_last_duration_ns() -> u64 {
 mod tests {
     use super::*;
 
+    // The counters are process-global; two tests that both bump "copy" and read the last
+    // duration back interleave under the parallel harness, so they take turns.
+    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn record_increments_named_strategy_counter() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let before = grove_wt_create_count("copy");
         record_grove_wt_create("copy", Duration::from_millis(12));
         assert_eq!(grove_wt_create_count("copy"), before + 1);
@@ -140,6 +145,7 @@ mod tests {
 
     #[test]
     fn standalone_counts_as_copy_metric_label() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let before = grove_wt_create_count("copy");
         record_grove_wt_create("standalone", Duration::from_millis(1));
         assert_eq!(grove_wt_create_count("copy"), before + 1);
@@ -147,6 +153,7 @@ mod tests {
 
     #[test]
     fn grove_fuse_and_grove_nfs_have_named_counters() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let fuse_before = grove_wt_create_count("grove-fuse");
         let nfs_before = grove_wt_create_count("grove-nfs");
         let alias_before = grove_wt_create_count("nfs");

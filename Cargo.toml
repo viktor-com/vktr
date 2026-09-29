@@ -9,6 +9,7 @@ members = [
     "crates/build/xai-proto-build",
     "crates/codegen/ptyctl",
     "crates/codegen/ptyctl-cli",
+    "crates/codegen/vktr-acp",
     "crates/codegen/xai-acp-lib",
     "crates/codegen/xai-agent-lifecycle",
     "crates/codegen/xai-chat-state",
@@ -404,6 +405,16 @@ codegen-units = 1
 strip = false
 debug = 1
 split-debuginfo = "off"
+
+# vktr distribution build: `cargo build -p xai-grok-pager-bin --profile vktr-dist` (see scripts/dist.sh).
+# Thin LTO for cross-crate optimisation, no debug info and stripped symbols for a small download,
+# no incremental state so an interrupted build cannot poison the artifacts.
+[profile.vktr-dist]
+inherits = "release"
+lto = "thin"
+strip = "symbols"
+debug = 0
+incremental = false
 
 # Production profile for latency-sensitive x-product services (VF, home-mixer).
 # Thin LTO gives ~90% of full LTO benefit at significantly faster link time.

@@ -139,7 +139,7 @@ pub struct PromptContext {
     #[serde(default = "default_system_prompt_label")]
     pub system_prompt_label: String,
 }
-/// Default identity on trim-tool-descriptions (`You are vktr released by xAI`).
+/// Default identity on trim-tool-descriptions (`You are vktr, working through vktr, ...`).
 pub const DEFAULT_SYSTEM_PROMPT_LABEL: &str = "vktr";
 fn default_system_prompt_label() -> String {
     DEFAULT_SYSTEM_PROMPT_LABEL.to_string()
@@ -462,9 +462,9 @@ mod tests {
     #[test]
     fn test_placeholders_system_prompt_label_override() {
         let mut ctx = test_context();
-        ctx.system_prompt_label = "Grok Internal".into();
+        ctx.system_prompt_label = "vktr Internal".into();
         let p = ctx.placeholders();
-        assert_eq!(jp(&p, "/system_prompt_label"), "Grok Internal");
+        assert_eq!(jp(&p, "/system_prompt_label"), "vktr Internal");
     }
     #[test]
     fn test_missing_system_prompt_label_deserializes_to_default() {

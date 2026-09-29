@@ -226,7 +226,7 @@ impl SubagentsConfig {
     /// Discover roles from `.vktr/roles/` directory and merge with inline config. File-based roles are loaded from `{cwd}/.vktr/roles/*.toml`.
     /// Each file defines a single `SubagentRole` (same schema as inline `[subagents.roles.*]`). The file stem becomes the role name. Precedence: inline config roles override file-based roles with the same name.
     pub(crate) fn discover_roles(&mut self, cwd: &std::path::Path) {
-        let roles_dir = cwd.join(".grok").join("roles");
+        let roles_dir = cwd.join(".vktr").join("roles");
         self.discover_roles_in_dir(&roles_dir);
     }
     pub const ENV_MAX_DEPTH: &'static str = "VKTR_SUBAGENTS_MAX_DEPTH";
@@ -380,7 +380,9 @@ impl SubagentsConfig {
             result.enabled,
             config.get("subagents").is_some(),
             None,
-            true,
+            // Off unless asked for: each subagent is another billed Viktor run, and Viktor runs
+            // its own subagents server-side (see `full_toolset`).
+            crate::agent::config::full_toolset(),
         );
         result.enabled = resolved.value;
         if let Some(root) = user_grok_root {
@@ -845,8 +847,8 @@ impl StorageMode {
 }
 pub use xai_grok_config::ConfigLayers;
 pub use xai_grok_config::{
-    VKTR_CONFIG_ENV, VKTR_CONFIG_PATH_ENV, MDM_REQUIREMENTS_SOURCE, OverlaySource,
-    RequirementsLayer, RequirementsSource, ResolvedOverlay, ServingIdentity, SyncMarker,
+    MDM_REQUIREMENTS_SOURCE, OverlaySource, RequirementsLayer, RequirementsSource, ResolvedOverlay,
+    ServingIdentity, SyncMarker, VKTR_CONFIG_ENV, VKTR_CONFIG_PATH_ENV,
     claude_managed_settings_probe_path, confirmed_team_switch, confirmed_team_switch_at,
     is_managed_config_hard_stale_for, is_managed_config_stale_for, load_config_file,
     load_from_disk, load_managed_config, load_merged_requirements, load_system_managed_config,
@@ -1857,7 +1859,7 @@ pub(crate) fn validate_hooks_path(path: &str) -> Result<(), Box<dyn std::error::
     let canonical_home = dunce::canonicalize(&grok_home).unwrap_or_else(|_| grok_home.clone());
     if !canonical.starts_with(&canonical_home) {
         return Err(format!(
-            "Hook path must be under ~/.grok/ ({}). Got: {}",
+            "Hook path must be under ~/.vktr/ ({}). Got: {}",
             canonical_home.display(),
             canonical.display()
         )

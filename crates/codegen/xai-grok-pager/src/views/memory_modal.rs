@@ -81,7 +81,7 @@ fn disabled_state_markdown(reason: Option<MemoryDisabledReason>) -> &'static str
             "\
 **Memory is off for this session.** Press **t** to turn it back on.
 
-While off, Grok isn't reading or saving notes; anything already remembered is kept on disk. \
+While off, vktr isn't reading or saving notes; anything already remembered is kept on disk. \
 Memory carries conventions, decisions, and project facts between sessions so you don't have \
 to repeat yourself."
         }

@@ -961,8 +961,9 @@ fn split_numbers_in_identifiers() {
 #[test]
 fn split_mixed_formats() {
     assert_eq!(
+        // The input is a literal MCP tool name; splitting reports its words as they are.
         split_identifier("grok_com_slack__slack_send_message"),
-        vec!["vktr", "com", "slack", "slack", "send", "message"]
+        vec!["grok", "com", "slack", "slack", "send", "message"]
     );
 }
 
@@ -1297,7 +1298,8 @@ fn fmt_case_insensitive_qualified_kebab_pascal() {
 #[test]
 fn fmt_case_insensitive_qualified_snake_snake() {
     let index = Bm25ToolSearchIndex::new(make_snapshot(mcp_format_tools()));
-    let snap = index.search_snapshot("VKTR_COM_SLACK__SLACK_SEND_MESSAGE", 5);
+    // Case-insensitive lookup of the fixture's own (upstream-named) tool.
+    let snap = index.search_snapshot("Grok_Com_Slack__Slack_Send_Message", 5);
     assert_eq!(snap.results.len(), 1);
     assert_eq!(
         snap.results.first().map(|r| r.tool_name.as_str()),

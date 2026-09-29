@@ -58,7 +58,7 @@ pub(super) fn grove_object_name(exe: &str, version: &str, platform: &str) -> Str
 
 /// `grok-<ver>-<platform>-mingit`; `.zip`, `.zip.sha256` and `.version` hang off it.
 pub(super) fn mingit_object_base(version: &str, platform: &str) -> String {
-    format!("grok-{version}-{platform}-mingit")
+    format!("vktr-{version}-{platform}-mingit")
 }
 
 /// The digest from a `sha256sum` sidecar (`<hex>  <name>`), lowercased.
@@ -546,7 +546,7 @@ mod tests {
         );
         assert_eq!(
             mingit_object_base("0.2.10", "windows-aarch64"),
-            "grok-0.2.10-windows-aarch64-mingit"
+            "vktr-0.2.10-windows-aarch64-mingit"
         );
         assert_eq!(staging_dir_name("0.2.10"), ".staging-0.2.10");
     }

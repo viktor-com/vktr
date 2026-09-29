@@ -10,8 +10,8 @@ use crate::theme::Theme;
 
 use super::{WelcomeLayout, WelcomeLayoutInput};
 
-/// Minimum terminal width for the side-by-side hero box layout.
-pub(super) const HERO_BOX_MIN_WIDTH: u16 = 90;
+/// Minimum terminal width for the side-by-side hero box layout: the compact wordmark plus a right column wide enough for the changelog.
+pub(super) const HERO_BOX_MIN_WIDTH: u16 = 100;
 
 /// Vertical padding (rows) between the box border and its inner content.
 const V_PAD: u16 = 1;
@@ -22,11 +22,26 @@ const H_INSET: u16 = 2;
 /// Horizontal gap (cols) between the logo and the right column inside the box.
 const LOGO_H_PAD: u16 = 3;
 
+/// Right-column width (cols) the box keeps beside the full wordmark; narrower boxes show the compact one.
+const FULL_LOGO_RIGHT_COL_MIN: u16 = 50;
+
+/// Box width for a content area: a 3-col margin each side, capped at 120.
+fn box_width(content_width: u16) -> u16 {
+    content_width.saturating_sub(6).min(120)
+}
+
+/// The wordmark tier the box shows at `content_width`.
+fn logo_tier(content_width: u16) -> LogoTier {
+    let inner_width = box_width(content_width).saturating_sub(2);
+    let roomy = inner_width >= logo_col_width(LogoTier::Full.width()) + FULL_LOGO_RIGHT_COL_MIN;
+    LogoTier::for_hero(roomy)
+}
+
 /// Rows the promo upgrade CTA reserves in the info slot: a spacer row above the `[label]` button row.
 /// Reserved on top of the announcement text rows so the message never paints over the button.
 const UPGRADE_CTA_ROWS: u16 = 2;
 
-const HERO_SUBTITLE: &str = "Thanks for trying vktr, give feedback with /feedback!";
+const HERO_SUBTITLE: &str = "Thanks for trying vktr, the Viktor-native coding agent";
 
 use super::logo::LogoTier;
 use super::{PROMPT_HEIGHT, VERSION_GAP};
@@ -46,14 +61,15 @@ fn right_col_height(menu_height: u16, info_height: u16) -> u16 {
 
 /// Minimum content-area height the hero box needs to render without truncating.
 /// That covers the optional error row, the box, a one-row flex gap, and the fixed rows below (tip + prompt + version).
-/// The box always shows the full-height logo, so a terminal shorter than this falls back to the stacked layout instead of overflowing.
+/// The box never shrinks its wordmark for height, so a terminal shorter than this falls back to the stacked layout instead of overflowing.
 pub(super) fn min_content_height(
     input: &WelcomeLayoutInput<'_>,
     info_height: u16,
     prompt_height: u16,
 ) -> u16 {
-    let inner =
-        super::logo::full_logo_line_count().max(right_col_height(input.menu_height, info_height));
+    let inner = logo_tier(input.content_area.width)
+        .rows()
+        .max(right_col_height(input.menu_height, info_height));
     let hero_box_height = 2 + V_PAD * 2 + inner;
     let gap_after_error = if input.error_height > 0 { 1u16 } else { 0 };
     gap_after_error
@@ -75,8 +91,7 @@ fn clamp_info_height(desired: u16, input: &WelcomeLayoutInput<'_>, one_line_prom
 
 /// Width (cols) of the hero box's left (logo) column, including padding.
 /// Collapses to a small inset when the logo is hidden.
-fn left_col_width() -> u16 {
-    let logo_width = super::logo::full_logo_visual_width();
+fn logo_col_width(logo_width: u16) -> u16 {
     if logo_width == 0 {
         H_INSET
     } else {
@@ -99,9 +114,10 @@ pub(super) fn compute_hero_box(input: &WelcomeLayoutInput<'_>) -> Option<Welcome
 
     // Column widths are height-independent, so derive them once and reuse for both the measurement and the rects
     // `hero_info.width == info_slot_width`, so the measured width is the drawn width
-    let box_width = content_area.width.saturating_sub(6).min(120);
+    let box_width = box_width(content_area.width);
     let inner_width = box_width.saturating_sub(2);
-    let left_col_width = left_col_width();
+    let tier = logo_tier(content_area.width);
+    let left_col_width = logo_col_width(tier.width());
     let right_width = inner_width.saturating_sub(left_col_width);
     let info_slot_width = right_width.saturating_sub(H_INSET);
     let info_height = match input.announcement {
@@ -116,7 +132,7 @@ pub(super) fn compute_hero_box(input: &WelcomeLayoutInput<'_>) -> Option<Welcome
         return None;
     }
 
-    let logo_rows = super::logo::full_logo_line_count();
+    let logo_rows = tier.rows();
     let info_gap = if info_height > 0 { 1u16 } else { 0 };
     let inner_height = logo_rows.max(right_col_height(menu_height, info_height));
     let hero_box_height = 2 + V_PAD * 2 + inner_height;
@@ -185,7 +201,7 @@ pub(super) fn compute_hero_box(input: &WelcomeLayoutInput<'_>) -> Option<Welcome
     };
 
     // Left column: balanced padding around the logo; collapses to a small inset when the logo is hidden
-    let logo_width = super::logo::full_logo_visual_width();
+    let logo_width = tier.width();
     // Logo body leans right; shave a column off the left pad to optically center.
     let logo_left_pad = LOGO_H_PAD.saturating_sub(1);
 
@@ -252,6 +268,7 @@ pub(super) fn compute_hero_box(input: &WelcomeLayoutInput<'_>) -> Option<Welcome
         tip,
         prompt,
         version: version_slot,
+        status: zero,
         hero_box,
         hero_logo,
         hero_version,
@@ -261,6 +278,38 @@ pub(super) fn compute_hero_box(input: &WelcomeLayoutInput<'_>) -> Option<Welcome
         // The box paints the full logo through `render_hero_box`; the stacked `logo` rect is empty
         logo_tier: LogoTier::Hidden,
     })
+}
+
+/// Where along the brand gradient the top edge starts: its navy first stop would vanish against a dark ground.
+const EDGE_GRADIENT_START: f32 = 0.2;
+/// Cells behind the drawing front that carry the glint while the edge reveals.
+const EDGE_GLINT_CELLS: f32 = 3.0;
+
+/// Repaint the box's top edge (corners included) along the brand gradient, drawn in left to right up to `progress`.
+/// Cells past the front keep the plain border; the few just behind it flash toward the glint, the way the wordmark's sweep does.
+fn paint_brand_edge(hero_box: Rect, buf: &mut Buffer, theme: &Theme, progress: f32) {
+    let width = hero_box.width;
+    if width < 2 || hero_box.height == 0 {
+        return;
+    }
+    let span = (width - 1) as f32;
+    let front = progress * span;
+    for col in 0..width {
+        let pos = col as f32;
+        if progress < 1.0 && pos > front {
+            break;
+        }
+        let along = EDGE_GRADIENT_START + (1.0 - EDGE_GRADIENT_START) * (pos / span);
+        let mut fg = theme.brand_gradient_at(along);
+        let behind = front - pos;
+        if progress < 1.0 && behind < EDGE_GLINT_CELLS {
+            let glint = 1.0 - behind / EDGE_GLINT_CELLS;
+            fg = crate::render::color::blend_color(fg, theme.brand_glint, glint).unwrap_or(fg);
+        }
+        if let Some(cell) = buf.cell_mut((hero_box.x + col, hero_box.y)) {
+            cell.set_fg(fg);
+        }
+    }
 }
 
 /// Hit-test rects produced by [`render_hero_box`].
@@ -307,6 +356,9 @@ pub(super) fn render_hero_box(
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(border_color));
     border_block.render(layout.hero_box, buf);
+    if let Some(progress) = super::logo::edge_reveal_progress() {
+        paint_brand_edge(layout.hero_box, buf, theme, progress);
+    }
 
     super::logo::render_full_logo(layout.hero_logo, buf, theme);
 

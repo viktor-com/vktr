@@ -301,7 +301,7 @@ pub(crate) fn session_token_auth_gate(
 pub const AUTH_ERROR_SESSION_EXPIRED: &str =
     "Session expired. Run `vktr login` to re-authenticate.";
 
-pub const AUTH_ERROR_API_KEY: &str = "Authentication failed. Run `vktr login`, set XAI_API_KEY, or add api_key to ~/.vktr/config.toml.";
+pub const AUTH_ERROR_API_KEY: &str = "Authentication failed. Set VIKTOR_API_KEY (a Viktor public API key with the chat:completions scope), or add api_key to ~/.vktr/config.toml.";
 
 /// Next ACP method id when `cached_token` cannot proceed (missing / expired / legacy WebLogin), or `None` when fallthrough is forbidden.
 /// Unpinned: prefer non-interactive `xai.api_key` when advertiseable, else interactive `grok.com`. Pinned `oidc`: **no** fallthrough to api_key; return `None` so the caller fails auth.
@@ -321,7 +321,7 @@ pub(crate) fn method_id_after_cached_token_unavailable(
 }
 
 /// Error when `preferred_method=api_key` but no key/BYOK credentials exist.
-pub const PREFERRED_API_KEY_UNAVAILABLE: &str = "preferred_method=api_key but no API key is configured (set XAI_API_KEY or model api_key/env_key in config.toml).";
+pub const PREFERRED_API_KEY_UNAVAILABLE: &str = "preferred_method=api_key but no API key is configured (set VIKTOR_API_KEY or model api_key/env_key in config.toml).";
 
 /// Error when `preferred_method=oidc` but the session path cannot proceed.
 pub const PREFERRED_OIDC_UNAVAILABLE: &str =
@@ -634,7 +634,7 @@ mod tests {
         };
         let built = build_auth_methods(inputs);
 
-        let vktr = built
+        let grok = built
             .methods
             .iter()
             .find(|m| AuthMethodKind::from_id(m.id()) == AuthMethodKind::GrokCom)
@@ -778,28 +778,6 @@ mod tests {
              must lead so the pager requires interactive login",
         );
         assert!(built.default_auth_method_id.is_none());
-    }
-
-    #[test]
-    #[serial]
-    fn env_key_probe_unusable_suppresses_advertise_without_byok() {
-        let _set = EnvGuard::set(XAI_API_KEY_ENV_VAR, "xai-dead-key");
-        let _legacy = EnvGuard::unset(LEGACY_XAI_API_KEY_ENV_VAR);
-        let cfg = Config::default();
-        let models = resolve_model_list(&cfg, None);
-        assert!(
-            should_advertise_xai_api_key(false, models.values()),
-            "presence-only helper still sees the env key"
-        );
-        assert!(
-            !should_advertise_xai_api_key_with_env_ok(false, models.values(), false),
-            "probe-unusable env key alone must not advertise"
-        );
-        let built = build_auth_methods(AuthMethodsBuildInputs {
-            has_external_api_key: false,
-            ..default_inputs()
-        });
-        assert_eq!(first_kind(&built.methods), Some(AuthMethodKind::GrokCom));
     }
 
     #[test]

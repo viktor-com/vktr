@@ -597,7 +597,7 @@ pub fn is_fetch_enabled() -> bool {
     crate::config::ConfigLayers::load()
         .ok()
         .and_then(|layers| super::policy::managed_config_enabled_from_layers(&layers))
-        .unwrap_or(true)
+        .unwrap_or(false)
 }
 
 pub fn has_principal() -> bool {

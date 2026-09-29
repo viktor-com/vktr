@@ -207,6 +207,28 @@ pub(super) fn strip_trailing_auth_error_blocks(agent: &mut AgentView) {
 /// Only the welcome view renders the auth UI (the external auth provider's sign-in URL and status).
 /// A mid-session invocation therefore stashes the caller's view in `auth_return_view` and switches to `Welcome` so the flow is visible.
 pub(super) fn dispatch_login(app: &mut AppView) -> Vec<Effect> {
+    // vktr signs in with a pasted Viktor API key: no browser, no OIDC, no xAI host. The paste box
+    // below is the whole flow; `dispatch_submit_auth_code` verifies and saves what is pasted.
+    if !matches!(app.active_view, ActiveView::Welcome) {
+        app.auth_return_view = Some(app.active_view);
+        show_welcome(app);
+    }
+    abort_prior_auth(app);
+    let request_seq = app.next_auth_request_seq;
+    app.next_auth_request_seq += 1;
+    app.auth_code_input.reset();
+    app.auth_state = AuthState::Authenticating {
+        request_seq,
+        handle: None,
+        auth_url: None,
+        mode: AuthMode::Loopback,
+    };
+    vec![]
+}
+
+/// Upstream's interactive login (xAI browser/OIDC), kept for diffs; vktr never starts it.
+#[allow(dead_code)]
+pub(super) fn dispatch_upstream_login(app: &mut AppView) -> Vec<Effect> {
     ensure_login_method(app);
     let Some(method_id) = app.login_method_id.clone() else {
         app.auth_state = AuthState::Pending {
@@ -286,7 +308,11 @@ pub(super) fn dispatch_submit_auth_code(app: &mut AppView, code: String) -> Vec<
         _ => return vec![],
     };
 
-    vec![Effect::SubmitAuthCode { request_seq, code }]
+    // What is pasted is a Viktor API key (see `dispatch_login`).
+    vec![Effect::SaveViktorKey {
+        request_seq,
+        key: code,
+    }]
 }
 
 // TaskResult handlers.

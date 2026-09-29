@@ -1311,7 +1311,7 @@ fn clear_default_model_persists_but_keeps_live_current() {
     use std::sync::Arc;
     let mut app = test_app_with_agent();
     let id = acp::ModelId::new(Arc::from("grok-test"));
-    let info = acp::ModelInfo::new(id.clone(), "Grok Test".to_string());
+    let info = acp::ModelInfo::new(id.clone(), "vktr Test".to_string());
     let agent_id = AgentId(0);
     app.agents
         .get_mut(&agent_id)
@@ -1384,7 +1384,7 @@ fn set_default_model_idempotent_when_already_current() {
     use std::sync::Arc;
     let mut app = test_app_with_agent();
     let id = acp::ModelId::new(Arc::from("grok-already"));
-    let info = acp::ModelInfo::new(id.clone(), "Grok Already".to_string());
+    let info = acp::ModelInfo::new(id.clone(), "vktr Already".to_string());
     let agent_id = AgentId(0);
     app.agents
         .get_mut(&agent_id)

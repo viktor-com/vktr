@@ -14,7 +14,7 @@
 //!   The artifact server and fake `gh` count downloads so the skip is asserted, not assumed.
 //! - **Race integrity** (`install_internal_from_base` run concurrently): the same-instant race is accepted as rare.
 //!   These tests pin the property that makes it acceptable: concurrent installs (same or *different* versions) never corrupt the active binary.
-//!   Before per-attempt temp names, every `0.1.x` download shared one `grok-0.1.tmp` (`with_extension("tmp")` eats everything after the last dot).
+//!   Before per-attempt temp names, every `0.1.x` download shared one `vktr-0.1.tmp` (`with_extension("tmp")` eats everything after the last dot).
 //!   Racer A could atomically rename racer B's half-written file into place.
 
 #![cfg(unix)]
@@ -46,7 +46,7 @@ fn assert_active_binary(home: &Path, version: &str, platform: &str, expected_con
         .unwrap_or_else(|e| panic!("active vktr symlink does not resolve: {e}"));
     assert_eq!(
         resolved.file_name().unwrap().to_string_lossy(),
-        format!("grok-{version}-{platform}"),
+        format!("vktr-{version}-{platform}"),
         "active vktr must be the expected version"
     );
     assert_eq!(
@@ -73,7 +73,7 @@ fn fake_managed_install(version: &str) {
     let bin = home.join("bin");
     std::fs::create_dir_all(&downloads).unwrap();
     std::fs::create_dir_all(&bin).unwrap();
-    let name = format!("grok-{version}-{}", host_platform());
+    let name = format!("vktr-{version}-{}", host_platform());
     std::fs::write(downloads.join(&name), small_good_artifact()).unwrap();
     std::fs::set_permissions(
         downloads.join(&name),
@@ -82,7 +82,7 @@ fn fake_managed_install(version: &str) {
     .unwrap();
     std::os::unix::fs::symlink(
         std::path::Path::new("../downloads").join(&name),
-        bin.join("grok"),
+        bin.join("vktr"),
     )
     .unwrap();
 }
@@ -327,7 +327,7 @@ async fn disk_probe_rejects_dangling_symlink() {
 
     std::fs::remove_file(
         home.join("downloads")
-            .join(format!("grok-0.2.7-{platform}")),
+            .join(format!("vktr-0.2.7-{platform}")),
     )
     .unwrap();
 
@@ -354,7 +354,7 @@ async fn ensure_latest_repairs_dangling_symlink_by_downloading() {
     fake_managed_install("0.2.7");
     std::fs::remove_file(
         home.join("downloads")
-            .join(format!("grok-0.2.7-{platform}")),
+            .join(format!("vktr-0.2.7-{platform}")),
     )
     .unwrap();
     let cfg = make_update_config("stable");
@@ -438,7 +438,7 @@ async fn concurrent_different_version_installs_do_not_corrupt_each_other() {
     let server = ArtifactServer::start(artifact.clone());
     server.set_slow(true);
 
-    // Pre-fix, BOTH of these wrote to downloads/grok-0.1.tmp concurrently (with_extension("tmp") truncates at the last dot)
+    // Pre-fix, BOTH of these wrote to downloads/vktr-0.1.tmp concurrently (with_extension("tmp") truncates at the last dot)
     // One racer could rename the other's partial file into its own versioned path
     let results = run_concurrent_installs(&server, &["0.1.181", "0.1.182"]).await;
     for r in results {
@@ -449,7 +449,7 @@ async fn concurrent_different_version_installs_do_not_corrupt_each_other() {
     for version in ["0.1.181", "0.1.182"] {
         let path = home
             .join("downloads")
-            .join(format!("grok-{version}-{platform}"));
+            .join(format!("vktr-{version}-{platform}"));
         assert_eq!(
             std::fs::read(&path).unwrap(),
             artifact,
@@ -467,7 +467,7 @@ async fn concurrent_different_version_installs_do_not_corrupt_each_other() {
     );
 
     assert!(
-        !home.join("downloads").join("grok-0.1.tmp").exists(),
+        !home.join("downloads").join("vktr-0.1.tmp").exists(),
         "the pre-fix shared temp name must not exist"
     );
 }

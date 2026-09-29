@@ -1407,7 +1407,7 @@ mod tests {
         scan_lines_for_url_overlays(rows.into_iter(), 2, &[], &mut overlay);
 
         assert_eq!(overlay.links().len(), 2, "one overlay region per row");
-        let expected_url = "file:///Users/alice/.grok/sessions/%252FUsers%252Fali\
+        let expected_url = "file:///Users/alice/.vktr/sessions/%252FUsers%252Fali\
                             ce%252Fcode%252Fxai/00000000-0000-0000-0000-000000000001/images/1.jpg";
         for link in overlay.links() {
             assert_eq!(
@@ -1425,7 +1425,7 @@ mod tests {
         assert_eq!(
             l0.col_end,
             2 + UnicodeWidthStr::width(
-                "Image generated and saved to /Users/alice/.grok/sessions/%2FUsers%2Fali"
+                "Image generated and saved to /Users/alice/.vktr/sessions/%2FUsers%2Fali"
             ) as u16
         );
         // Row 1: the continuation fragment covers the entire row.
@@ -1443,7 +1443,7 @@ mod tests {
     #[test]
     fn scan_wrapped_path_trailing_sentence_period_excluded() {
         // Wrapped path ending mid-sentence: trailing `.` on the last row is trimmed from the clickable region
-        let row0 = make_line("Saved to /Users/me/.grok/sessions/%2Fabc/019f3a86/ima");
+        let row0 = make_line("Saved to /Users/me/.vktr/sessions/%2Fabc/019f3a86/ima");
         let row1 = make_line("ges/1.jpg. Enjoy!");
         let rows: Vec<(u16, &Line<'static>, Option<&str>)> =
             vec![(0, &row0, None), (1, &row1, Some(""))];
@@ -1456,7 +1456,7 @@ mod tests {
                 &*resolve_link_target(&link.target)
                     .and_then(|resolved| resolved.osc8_url)
                     .expect("url"),
-                "file:///Users/me/.grok/sessions/%252Fabc/019f3a86/images/1.jpg"
+                "file:///Users/me/.vktr/sessions/%252Fabc/019f3a86/images/1.jpg"
             );
         }
         assert_eq!(nth_link(&overlay, 1).col_start, 0);

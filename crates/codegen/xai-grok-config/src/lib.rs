@@ -50,7 +50,7 @@ pub use config_layers::{
 };
 pub use display_refresh::DisplayRefreshSettings;
 pub use env_overlay::{
-    VKTR_CONFIG_ENV, VKTR_CONFIG_PATH_ENV, OverlaySource, ResolvedOverlay, resolved_env_overlay,
+    OverlaySource, ResolvedOverlay, VKTR_CONFIG_ENV, VKTR_CONFIG_PATH_ENV, resolved_env_overlay,
 };
 #[cfg(unix)]
 pub use global_hook_sources::{

@@ -12,7 +12,7 @@ type = "builtin"
 items = ["cwd", "model", "context"]   # default when omitted
 ```
 
-This renders, for example, `grok-shell-status-line │ Grok 4.5 │ 12% ctx`. Items appear in the order you list them, and long ones are elided with `…`: the directory and session name at 40 columns, the model at 30.
+This renders, for example, `my-project │ Viktor │ 12% ctx`. Items appear in the order you list them, and long ones are elided with `…`: the directory and session name at 40 columns, the model at 30.
 
 | Item | Shows |
 | --- | --- |
@@ -128,7 +128,7 @@ printf '%b\n' "${DIR##*/} │ $MODEL │ ${PCT}% ctx │ \033[32m$BRANCH\033[0m 
 
 ## Tips
 
-- Test with mock input: `echo '{"session_id":"t","workspace":{"current_dir":"/tmp/demo"},"model":{"display_name":"Grok 4.5"},"context_window":{"used_percentage":25}}' | ./statusline.sh`
+- Test with mock input: `echo '{"session_id":"t","workspace":{"current_dir":"/tmp/demo"},"model":{"display_name":"Viktor"},"context_window":{"used_percentage":25}}' | ./statusline.sh`
 - Cache slow commands such as `git status` to a temp file keyed on `session_id`, refreshed every few seconds. `session_id` is stable per session and unique across sessions.
 - Use `printf '%b'` rather than `echo -e` for reliable escapes.
 

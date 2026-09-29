@@ -1777,6 +1777,9 @@ pub enum Effect {
     PollAuthUrl { request_seq: u64 },
     /// Submit a manually-pasted auth code (ext request).
     SubmitAuthCode { request_seq: u64, code: String },
+    /// vktr sign-in: verify a pasted Viktor API key against the compat API, save it like
+    /// `vktr login` does, then authenticate the agent with it.
+    SaveViktorKey { request_seq: u64, key: String },
     /// Fetch MCP server list from the shell (x.ai/mcp/list).
     FetchMcpsList {
         agent_id: AgentId,

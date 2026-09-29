@@ -209,7 +209,7 @@ fn unchanged_source_is_a_no_op_and_a_changed_source_imports_only_the_delta() {
     assert_eq!(first, fixture.topic("build-test"));
 
     fixture.write_legacy(&format!(
-        "{DREAM_SHAPED}\n## Build & Test\n\nAlso run `cargo fmt --all`.\n\n## Releases\n\nAlpha is `grok update --alpha`.\n"
+        "{DREAM_SHAPED}\n## Build & Test\n\nAlso run `cargo fmt --all`.\n\n## Releases\n\nAlpha is `vktr update --alpha`.\n"
     ));
     let report = fixture.run_imported();
     assert_eq!(1, report.topics_created, "Releases is new");
