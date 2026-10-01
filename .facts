@@ -168,6 +168,10 @@
   command: grep -rqE --include=*.rs '(fn|mod) vktrs_own_front_ends_are_just_vktr' crates/codegen/xai-grok-sampler && grep -rqE --include=*.rs '(fn|mod) vktrs_own_tui_is_just_vktr' crates/codegen/xai-grok-http
   tags: [implemented, ci]
 
+- label: the README opens by saying vktr is a Grok Build fork with a few extensions and its own look, shows a screenshot instead of a feature list, and its For agents section covers install, auth, running a task, project instructions and folder trust, permissions, multi-step work, the human's tools, troubleshooting and working on the repository
+  command: head -5 README.md | grep -q 'fork of \[Grok Build\]' && grep -q 'src="docs/assets/screenshot.png"' README.md && test -s docs/assets/screenshot.png && for h in '1. Install' '2. Authenticate' '3. Run a task' '4. Project instructions and folder trust' '5. Permissions' '6. Multi-step work' '7. Set up the human' '8. Check and troubleshoot' '9. Working on this repository'; do grep -q "^### $h" README.md || exit 1; done
+  tags: [implemented, ci]
+
 # acp
 
 - label: vktr acp serves Viktor to ACP editors over stdio and keeps wire parity with the TypeScript viktor-acp agent for a chat-only client: initialize (v1, image and embeddedContext prompt capabilities, the viktor-api-key auth method), authenticate against the models endpoint, session/new, a streaming session/prompt, session/cancel, one ACP session = one Viktor thread through previous_response_id, text/image/resource-link/embedded-text prompt content, no tools on the wire, and a failed run returned as a JSON-RPC error carrying Viktor's own message, error class and request id

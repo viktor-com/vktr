@@ -14,6 +14,7 @@ Recorded with `scripts/record-live.py <flow>` against `https://api.viktor.com/ap
 | `live-coding.cast` | A project with a failing test: Viktor runs the tests, fixes `calc.py`, re-runs them; `git diff` and a green run in the shell afterwards |
 | `live-approval.cast` | Viktor wants to write `README.md`, the write is rejected and never happens; the redirected `CALC.md` is allowed for the session and written |
 | `live-acp-launch.cast` | `vktr acp` launched as an editor would (`scripts/acp-demo.py`): reads, a write and a command through the editor with permission prompts, then an agent restart, `session/load` and a follow-up on the same Viktor thread |
+| `live-screenshot.cast` | The failing-test task again, recorded at 120x38 for the README screenshot |
 | `m1-live-viktor.cast` | TUI against live Viktor: a local read tool and an explanation |
 
 The README's `docs/assets/demo-coding.gif` is rendered from `live-coding.cast` with
@@ -22,6 +23,17 @@ The README's `docs/assets/demo-coding.gif` is rendered from `live-coding.cast` w
 ```
 agg --font-size 14 --idle-time-limit 2 --speed 1.2 docs/recordings/live-coding.cast docs/assets/demo-coding.gif
 ```
+
+The README's `docs/assets/screenshot.png` is the last frame of `live-screenshot.cast` (the same
+failing-test task, 120x38, vktr Night), rendered with agg and cut out with ffmpeg:
+
+```
+agg --font-size 16 --idle-time-limit 1 --last-frame-duration 1 docs/recordings/live-screenshot.cast /tmp/s.gif
+ffmpeg -i /tmp/s.gif -vf reverse -frames:v 1 docs/assets/screenshot.png
+```
+
+Record with `NO_COLOR`, `FORCE_COLOR=0` and `CLICOLOR=0` unset: vktr honours them and the cast comes
+out grey.
 
 ## Mock server
 

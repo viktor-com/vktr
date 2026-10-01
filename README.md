@@ -6,7 +6,7 @@ coding agent, with a few extensions on top and its own look.** It is maintained 
 otherwise works the way Grok Build does.
 
 <p align="center">
-  <img src="docs/assets/screenshot.png" alt="vktr in a terminal: the Viktor welcome screen above a session where Viktor ran the failing tests and asks before applying its fix to calc.py" width="860">
+  <img src="docs/assets/screenshot.png" alt="vktr in a terminal: Viktor ran a project's failing tests, edited calc.py (diff shown inline), re-ran the tests and explained the fix" width="860">
 </p>
 
 To install it, ask your coding agent: *"Install vktr from github.com/viktor-com/vktr and set it up for
