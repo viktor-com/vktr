@@ -174,6 +174,49 @@ pub fn write_bundle_to_cache(root: &Path, bundle: &SubagentBundle) -> Result<Bun
     Ok(next_manifest)
 }
 
+/// Manifest version written when default skills seed a cache that no bundle sync has populated.
+pub const DEFAULT_SKILLS_VERSION: &str = "vktr-defaults";
+
+/// Seed `(name, SKILL.md body)` pairs compiled into the binary as `skills/<name>/SKILL.md`.
+/// A file is written only when absent or still matching its manifest checksum, so hand edits survive.
+/// Unlike a bundle sync this never prunes: every other manifest entry is kept as is.
+/// The manifest is rewritten only when something changed.
+pub fn seed_default_skills(root: &Path, skills: &[(&str, &str)]) -> Result<BundleManifest> {
+    let old_manifest = read_cached_manifest(root)?.map(sanitize_manifest);
+    let mut next_manifest = old_manifest.clone().unwrap_or_else(|| BundleManifest {
+        version: DEFAULT_SKILLS_VERSION.to_owned(),
+        checksums: HashMap::new(),
+    });
+
+    for &(name, content) in skills {
+        validate_bundle_name(BundleFileKind::Skill, name)?;
+        let relative_path = relative_path_for(BundleFileKind::Skill, name);
+        let checksum = checksum_bytes(content.as_bytes());
+        let absolute_path = root.join(&relative_path);
+        let previous = next_manifest.checksums.get(&relative_path).cloned();
+        match bundle_file_state(&absolute_path, previous.as_deref())? {
+            BundleFileState::Absent | BundleFileState::MatchesManaged => {
+                if previous.as_deref() != Some(checksum.as_str()) || !absolute_path.exists() {
+                    write_bundle_file(&absolute_path, content.as_bytes())?;
+                }
+                next_manifest.checksums.insert(relative_path, checksum);
+            }
+            BundleFileState::ModifiedOrUnmanaged => {}
+        }
+    }
+
+    if old_manifest.as_ref() != Some(&next_manifest) || !manifest_path(root).exists() {
+        std::fs::create_dir_all(root)
+            .with_context(|| format!("failed to create {}", root.display()))?;
+        let manifest_json = serde_json::to_vec_pretty(&next_manifest)
+            .context("failed to serialize bundle manifest")?;
+        std::fs::write(manifest_path(root), manifest_json)
+            .with_context(|| format!("failed to write {}", manifest_path(root).display()))?;
+    }
+
+    Ok(next_manifest)
+}
+
 pub fn extract_bundle_archive(root: &Path, archive_bytes: &[u8]) -> Result<BundleManifest> {
     let decoder = flate2::read::GzDecoder::new(archive_bytes);
     let mut archive = tar::Archive::new(decoder);
@@ -551,6 +594,88 @@ mod tests {
 
     fn cache_root(tmp: &TempDir) -> PathBuf {
         tmp.path().join("bundled")
+    }
+
+    #[test]
+    fn default_skills_seed_an_empty_cache() {
+        let tmp = TempDir::new().unwrap();
+        let root = cache_root(&tmp);
+
+        let manifest = seed_default_skills(&root, &[("alpha", "body v1")]).unwrap();
+
+        assert_eq!(manifest.version, DEFAULT_SKILLS_VERSION);
+        assert_eq!(
+            std::fs::read_to_string(root.join("skills/alpha/SKILL.md")).unwrap(),
+            "body v1"
+        );
+        assert!(is_managed_bundle_file(&root, "skills/alpha/SKILL.md"));
+    }
+
+    #[test]
+    fn default_skills_refresh_unedited_and_keep_edited_copies() {
+        let tmp = TempDir::new().unwrap();
+        let root = cache_root(&tmp);
+        seed_default_skills(&root, &[("alpha", "a v1"), ("beta", "b v1")]).unwrap();
+        std::fs::write(root.join("skills/beta/SKILL.md"), "my edit").unwrap();
+
+        seed_default_skills(&root, &[("alpha", "a v2"), ("beta", "b v2")]).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(root.join("skills/alpha/SKILL.md")).unwrap(),
+            "a v2"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("skills/beta/SKILL.md")).unwrap(),
+            "my edit"
+        );
+        // Still not ours after another run, even once the shipped body matches nothing on disk.
+        seed_default_skills(&root, &[("beta", "b v3")]).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.join("skills/beta/SKILL.md")).unwrap(),
+            "my edit"
+        );
+    }
+
+    #[test]
+    fn default_skills_do_not_adopt_an_unmanaged_file() {
+        let tmp = TempDir::new().unwrap();
+        let root = cache_root(&tmp);
+        std::fs::create_dir_all(root.join("skills/alpha")).unwrap();
+        std::fs::write(root.join("skills/alpha/SKILL.md"), "hand written").unwrap();
+
+        seed_default_skills(&root, &[("alpha", "shipped")]).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(root.join("skills/alpha/SKILL.md")).unwrap(),
+            "hand written"
+        );
+    }
+
+    #[test]
+    fn default_skills_leave_synced_bundle_entries_alone() {
+        let tmp = TempDir::new().unwrap();
+        let root = cache_root(&tmp);
+        let synced = write_bundle_to_cache(
+            &root,
+            &bundle_with_persona("v7", "researcher", "instructions = \"hi\""),
+        )
+        .unwrap();
+
+        let manifest = seed_default_skills(&root, &[("alpha", "body")]).unwrap();
+
+        assert_eq!(manifest.version, "v7");
+        assert!(root.join("personas/researcher.toml").exists());
+        assert_eq!(
+            manifest.checksums.get("personas/researcher.toml"),
+            synced.checksums.get("personas/researcher.toml")
+        );
+        assert!(manifest.checksums.contains_key("skills/alpha/SKILL.md"));
+    }
+
+    #[test]
+    fn default_skills_reject_path_like_names() {
+        let tmp = TempDir::new().unwrap();
+        assert!(seed_default_skills(&cache_root(&tmp), &[("../x", "body")]).is_err());
     }
 
     #[test]
