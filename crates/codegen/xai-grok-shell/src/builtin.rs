@@ -31,6 +31,22 @@ pub fn extract_builtin_files(grok_home: &std::path::Path) {
     tracing::debug!(version, "Extracted built-in files");
 }
 
+/// Default skills compiled into the binary and seeded into `$VKTR_HOME/bundled/skills/` on every start.
+/// Sources are vendored under `default-skills/`; refresh them from upstream by copying the file over.
+pub const DEFAULT_SKILLS: &[(&str, &str)] = &[(
+    // https://github.com/av/skills/tree/master/use-coding-agents
+    "use-coding-agents",
+    include_str!("../default-skills/use-coding-agents/SKILL.md"),
+)];
+
+/// Seed [`DEFAULT_SKILLS`] into the bundled cache under `grok_home`, keeping hand edits and other bundled files.
+pub fn seed_default_skills(grok_home: &std::path::Path) {
+    let root = grok_home.join("bundled");
+    if let Err(e) = xai_grok_bundle::seed_default_skills(&root, DEFAULT_SKILLS) {
+        tracing::warn!(error = %e, "failed to seed default skills");
+    }
+}
+
 /// `(name, sha256)` of every `SKILL.md` body ever extracted into `$VKTR_HOME/skills/`; `help` rows hash the pre-substitution bytes.
 const FORMER_PLATFORM_SKILL_HASHES: &[(&str, &str)] = &[
     (
@@ -170,6 +186,25 @@ fn sha256_hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_skills_seed_use_coding_agents_into_bundled() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path();
+
+        seed_default_skills(home);
+        seed_default_skills(home);
+
+        let skill = home.join("bundled/skills/use-coding-agents/SKILL.md");
+        let body = std::fs::read_to_string(&skill).unwrap();
+        assert!(body.starts_with("---\nname: use-coding-agents\n"));
+        assert!(xai_grok_bundle::is_managed_bundle_file(
+            &home.join("bundled"),
+            "skills/use-coding-agents/SKILL.md"
+        ));
+        // The user skills dir is untouched.
+        assert!(!home.join("skills").exists());
+    }
 
     #[test]
     fn version_bump_reextracts_metadata_without_touching_skills() {

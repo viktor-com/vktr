@@ -443,6 +443,7 @@ fn init_process(cfg: &AgentConfig, auth_manager: &AuthManager) {
         crate::builtin::extract_builtin_files(&grok_home);
         if !cfg!(test) {
             crate::builtin::purge_stale_extracted_skills(&grok_home);
+            crate::builtin::seed_default_skills(&grok_home);
         }
         crate::extensions::marketplace::purge_default_skills_installs(&grok_home);
         if cfg.resolve_official_marketplace_auto_register().value {

@@ -210,6 +210,12 @@ The `--json` report includes the full detail for each skill: its `name`, `descri
 
 vktr distributes platform skills separately from your personal skills. Bundled skills are cached under `~/.vktr/bundled/skills/`; vktr never writes them into `~/.vktr/skills/`. A same-named local, repo, or user skill overrides the bundled copy. `vktr inspect` labels each definition by its actual source. (A plugin skill of the same name does not override a native skill; it stays available under its qualified `plugin:name` form.)
 
+vktr ships one default skill, compiled into the binary and written to `~/.vktr/bundled/skills/` on every start:
+
+- **use-coding-agents** (from [av/skills](https://github.com/av/skills/tree/master/use-coding-agents)) -- run the coding-agent CLIs installed on the machine (claude, codex, opencode, grok and others) as plain headless sub-agents: one prompt in, one result out, orchestrated by the current session.
+
+`~/.vktr/bundled/manifest.json` records a checksum for the shipped file. If you edit it by hand, vktr leaves it alone; an unedited copy is replaced when a newer vktr ships a newer version. If you delete it, the next start restores it. To replace it permanently, put a skill with the same name in `~/.vktr/skills/` or a repo. To turn it off, list it in `[skills].disabled`.
+
 Skills can also come from plugins. When you install a plugin that includes skills, they appear alongside your user and project skills. `vktr inspect` labels each plugin-provided skill with its source as `plugin: <name>`.
 
 See the [Plugins guide](09-plugins.md) for more on installing plugins that provide skills.
