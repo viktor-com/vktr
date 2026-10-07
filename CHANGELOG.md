@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- vktr ships a default skill, `use-coding-agents` (from github.com/av/skills): seeded into
+  `~/.vktr/bundled/skills/` at start; a user or repo skill of the same name wins, and a hand-edited
+  copy is never overwritten
+
 ## 1.0.38-vktr.3 — 2026-10-22
 
 ### Fixes
