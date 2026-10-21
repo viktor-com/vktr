@@ -13,7 +13,7 @@ pub(super) const LENGTH_CONTINUE_REMINDER_BODY: &str = "Your previous response e
      limit and was cut off. Continue from exactly where it stopped — or if a newer user \
      message follows this note, answer that instead.";
 
-/// Automatic continues per turn after the server paused a long run at its time limit (Viktor's is 10 minutes a run).
+/// Automatic continues per prompt after the server paused a long run at its time limit (Viktor's is 10 minutes a run).
 /// Unlike a token cut this is always on: the run is not out of room, it just needs a new request.
 pub(super) const PAUSED_TURN_CONTINUE_BUDGET: u32 = 6;
 
@@ -79,6 +79,8 @@ pub(super) struct LengthSalvage {
     truncated: bool,
     /// Sticky for the whole prompt: the exhaustion event fires once even when later rounds spend the already-empty budget again.
     exhaustion_reported: bool,
+    /// Continues spent on runs the server paused at its time limit, counted for the whole prompt.
+    paused_continues: u32,
 }
 
 impl LengthSalvage {
@@ -91,6 +93,7 @@ impl LengthSalvage {
             reminder_armed: true,
             truncated: false,
             exhaustion_reported: false,
+            paused_continues: 0,
         }
     }
 
@@ -137,6 +140,22 @@ impl LengthSalvage {
     pub(super) fn round_boundary(&mut self) {
         self.step_boundary();
         self.truncated = false;
+    }
+
+    pub(super) fn paused_continues(&self) -> u32 {
+        self.paused_continues
+    }
+
+    /// Advance the state machine for a run the server paused at its time limit; `true` continues it.
+    /// [`PAUSED_TURN_CONTINUE_BUDGET`] is the hard total: past it the answer is marked cut off, and the caller must not
+    /// hand the run to [`Self::on_length_stop`], whose budget would spend more requests on it.
+    pub(super) fn on_paused_stop(&mut self) -> bool {
+        if self.paused_continues < PAUSED_TURN_CONTINUE_BUDGET {
+            self.paused_continues += 1;
+            return true;
+        }
+        self.truncated = true;
+        false
     }
 
     /// Advance the state machine for a `Length`-stopped response.
@@ -244,6 +263,18 @@ mod tests {
     #[test]
     fn disabled_without_cursor_or_env() {
         assert_eq!(resolve_length_salvage_budget(false, None, None), None);
+    }
+
+    #[test]
+    fn paused_continues_stop_at_the_hard_total_and_mark_the_answer_cut() {
+        let mut s = LengthSalvage::new(Some(2));
+        for _ in 0..PAUSED_TURN_CONTINUE_BUDGET {
+            assert!(s.on_paused_stop());
+        }
+        assert!(!s.is_truncated());
+        assert!(!s.on_paused_stop());
+        assert!(s.is_truncated());
+        assert_eq!(s.continues(), 0, "the token-salvage budget is untouched");
     }
 
     #[test]

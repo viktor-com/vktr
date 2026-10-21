@@ -95,10 +95,21 @@ async fn salvage_test_actor_on_backend(
     context_window: u64,
     backend: xai_grok_sampling_types::ApiBackend,
 ) -> Arc<SessionActor> {
+    actor_for_model(server, total_tokens, context_window, backend, "test", None).await
+}
+/// [`salvage_test_actor_on_backend`] for `model`, with a remote length-salvage `budget`.
+async fn actor_for_model(
+    server: &MockInferenceServer,
+    total_tokens: u64,
+    context_window: u64,
+    backend: xai_grok_sampling_types::ApiBackend,
+    model: &str,
+    budget: Option<u32>,
+) -> Arc<SessionActor> {
     let sampling_cfg = xai_grok_sampler::SamplerConfig {
         api_key: Some("test-key".to_string()),
         base_url: server.url(),
-        model: "test".to_string(),
+        model: model.to_string(),
         api_backend: backend.clone(),
         context_window,
         max_retries: Some(0),
@@ -122,6 +133,7 @@ async fn salvage_test_actor_on_backend(
     drain_persistence(persistence_rx);
     let mut actor =
         create_test_actor(total_tokens, context_window, 85, gateway_tx, persistence_tx).await;
+    actor.length_salvage_remote_budget = budget;
     actor.sampler_handle = sampler_handle;
     let mut cfg = actor
         .chat_state_handle
@@ -130,7 +142,7 @@ async fn salvage_test_actor_on_backend(
         .expect("test actor has sampling config");
     cfg.base_url = server.url();
     cfg.api_backend = backend;
-    cfg.model = "test".to_string();
+    cfg.model = model.to_string();
     actor.chat_state_handle.update_sampling_config(cfg);
     let mut creds = actor.chat_state_handle.get_credentials().await;
     creds.api_key = Some("test-key".to_string());
@@ -458,6 +470,7 @@ fn messages_stop_sse(text: &str) -> ScriptedResponse {
 /// Viktor's compat API `CAP_REACHED_NOTE`, the closing delta of a run its time limit cut off.
 const VIKTOR_CAP_NOTE: &str = "[Viktor stopped here: this request reached its time limit before the work \
      was finished. Work already done in Viktor's workspace is kept. Ask Viktor to continue to pick up from there.]";
+
 /// Responses SSE ending `response.incomplete` with `max_output_tokens`, as Viktor's compat API sends it.
 /// `with_note` adds the cap note Viktor sends when its run time limit, not the token budget, ended the run.
 fn responses_incomplete_sse(text: &str, with_note: bool) -> ScriptedResponse {
@@ -530,13 +543,7 @@ fn a_run_paused_at_viktors_time_limit_continues_on_its_own() {
                     "test",
                 )),
             );
-            let actor = salvage_test_actor_on_backend(
-                &server,
-                0,
-                256_000,
-                xai_grok_sampling_types::ApiBackend::Responses,
-            )
-            .await;
+            let actor = viktor_actor(&server, None).await;
             let outcome = run_prompt(&actor, "paused-turn").await;
             let ok = outcome.expect("a paused run continues instead of failing the turn");
             assert_eq!(ok.stop_reason, acp::StopReason::EndTurn);
@@ -574,13 +581,7 @@ fn a_responses_token_cut_still_fails_as_truncated() {
                 "/v1/responses",
                 responses_incomplete_sse("one, two,", false),
             );
-            let actor = salvage_test_actor_on_backend(
-                &server,
-                0,
-                256_000,
-                xai_grok_sampling_types::ApiBackend::Responses,
-            )
-            .await;
+            let actor = viktor_actor(&server, None).await;
             let err = run_prompt(&actor, "responses-token-cut")
                 .await
                 .expect_err("a token cut must still fail the turn");
@@ -591,4 +592,45 @@ fn a_responses_token_cut_still_fails_as_truncated() {
             );
         });
     });
+}
+/// An actor on a Viktor model of the Responses backend (`viktor/<slug>`: it gets the cap-note filter but no thread
+/// store, so nothing is written under the user's home), with a remote length-salvage `budget`.
+async fn viktor_actor(server: &MockInferenceServer, budget: Option<u32>) -> Arc<SessionActor> {
+    actor_for_model(
+        server,
+        0,
+        256_000,
+        xai_grok_sampling_types::ApiBackend::Responses,
+        "viktor/smart",
+        budget,
+    )
+    .await
+}
+/// Six continues per prompt is the hard total: a run still paused after them is not handed to token salvage, whose
+/// budget would spend more requests on it (review probe: 9 requests with a salvage budget of 2).
+#[test]
+fn six_continues_are_the_hard_total_even_with_salvage_on() {
+    for budget in [Some(2), None] {
+        block_on_session(move || {
+            current_thread_local(async move {
+                let server = MockInferenceServer::start().await.expect("mock server");
+                for _ in 0..12 {
+                    server.enqueue_response(
+                        "/v1/responses",
+                        responses_incomplete_sse("partial", true),
+                    );
+                }
+                let actor = viktor_actor(&server, budget).await;
+                let ok = run_prompt(&actor, "paused-hard-total")
+                    .await
+                    .expect("an exhausted pause completes the turn");
+                assert_eq!(
+                    server.request_count_for("/v1/responses"),
+                    7,
+                    "the first run plus six continues, salvage budget {budget:?}"
+                );
+                assert_eq!(ok.stop_reason, acp::StopReason::MaxTokens);
+            });
+        });
+    }
 }
