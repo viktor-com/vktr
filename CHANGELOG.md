@@ -2,8 +2,12 @@
 
 ## Unreleased
 
+## 1.0.38-vktr.3 — 2026-10-22
+
 ### Fixes
 
+- Images reach Viktor as images: a screenshot that a tool reads, or an image path in the prompt, is
+  sent as image input instead of being dropped or dumped as text
 - A long Viktor run that reaches Viktor's 10-minute time limit now carries on by itself in the same
   turn: no "[Viktor stopped here …]" note, no "Response truncated" error, no need to type "continue"
 
