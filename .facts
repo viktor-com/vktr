@@ -114,6 +114,12 @@
 - label: automatic compaction is skipped for the built-in viktor model on the Responses backend with continuation, because Viktor compacts its threads server-side and a client-side compaction would cost a billed run and replay into a fresh thread (losing Viktor's sandbox state); /compact still works, stateless protocols and VKTR_RESPONSES_CONTINUATION=0 compact as before, VKTR_VIKTOR_CLIENT_COMPACTION=1 restores it
   command: grep -rqE --include=*.rs '(fn|mod) viktor_context_tests' crates/codegen/xai-grok-shell
   tags: [implemented, ci]
+- label: an image a tool returns (read_file on a PNG) reaches the built-in viktor model on the Responses backend as an input_image in one user message after that run of tool results, because Viktor keeps only the text of a function_call_output; other models keep the image inside the tool output
+  command: grep -rqE --include=*.rs '(fn|mod) a_tool_result_image_reaches_viktor_in_a_user_message' crates/codegen/xai-grok-sampler && grep -q 'viktor_tool_images::move_to_user_message' crates/codegen/xai-grok-sampler/src/client.rs
+  tags: [implemented, ci]
+- label: an absolute image path in the prompt prose (a dragged screenshot followed by a question, escaped, quoted or with raw spaces) is attached as an image without a tool call, within the placeholder allowlist plus the system temp dir; the path text stays in the prompt
+  command: grep -rqE --include=*.rs '(fn|mod) a_dragged_screenshot_path_followed_by_prose_is_attached' crates/codegen/xai-grok-shared && grep -q 'attach_inline_image_paths(' crates/codegen/xai-grok-shell/src/session/acp_session_impl/turn.rs
+  tags: [implemented, ci]
 
 # m4 launch
 - label: vktr launch [--backend <svc|url>] [--model <m>] [--config] <tool> [args] finds a reachable OpenAI-compatible backend, discovers models from /v1/models (OpenAI data[] and Ollama models[] shapes, skipping embedding models), wires the model into claude, codex, copilot, grok, hermes, mi, opencode, pi, pool or vktr through env vars or the tool's documented config file, passes everything after the tool name through unchanged, and runs the tool from the invoking directory; --config prints the wiring with secrets masked and writes config files without starting the tool; --viktor points the tool at the Viktor compat API using VIKTOR_API_KEY or the key saved by vktr login; when harbor is on PATH, local launches are delegated to harbor launch unchanged

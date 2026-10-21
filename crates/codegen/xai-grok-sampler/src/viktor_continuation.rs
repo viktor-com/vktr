@@ -20,7 +20,7 @@ use std::sync::{LazyLock, Mutex};
 use async_openai::types::responses as rs;
 
 /// The only model served by the Viktor compat API.
-const VIKTOR_MODEL: &str = "viktor";
+pub(crate) const VIKTOR_MODEL: &str = "viktor";
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct Entry {

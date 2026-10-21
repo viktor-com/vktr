@@ -1011,6 +1011,20 @@ impl SessionActor {
             }
             let query =
                 crate::session::placeholder_images::strip_paths_from_image_placeholders(query);
+            if policy.authority != InputAuthority::ModelAuthoredUntrusted {
+                let attached = crate::session::placeholder_images::attach_inline_image_paths(
+                    &query,
+                    &mut raw_images,
+                    std::path::Path::new(&self.session_info.cwd),
+                );
+                if attached > 0 {
+                    tracing::info!(
+                        session_id = %self.session_info.id,
+                        attached,
+                        "attached image file(s) named by path in the prompt",
+                    );
+                }
+            }
             let query = if send_now && !verbatim {
                 xai_interjection_core::frame_user_turn(
                     xai_interjection_core::INTERJECTION_NOTE,
