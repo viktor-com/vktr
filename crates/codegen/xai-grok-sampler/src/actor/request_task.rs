@@ -715,7 +715,11 @@ async fn drive_l2(
                     // deterministic — resampling it would retry-storm.
                     let content_filtered = response.stop_reason
                         == Some(xai_grok_sampling_types::StopReason::ContentFilter);
-                    if !content_filtered && let Some(reason) = response.empty_reason() {
+                    // A run paused before it wrote anything is continued by the turn loop, never resent
+                    if !content_filtered
+                        && !response.is_paused_turn()
+                        && let Some(reason) = response.empty_reason()
+                    {
                         let context = build_empty_context(reason, &response);
                         return AttemptOutcome::Empty {
                             context,

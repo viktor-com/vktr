@@ -13,6 +13,15 @@ pub(super) const LENGTH_CONTINUE_REMINDER_BODY: &str = "Your previous response e
      limit and was cut off. Continue from exactly where it stopped — or if a newer user \
      message follows this note, answer that instead.";
 
+/// Automatic continues per turn after the server paused a long run at its time limit (Viktor's is 10 minutes a run).
+/// Unlike a token cut this is always on: the run is not out of room, it just needs a new request.
+pub(super) const PAUSED_TURN_CONTINUE_BUDGET: u32 = 6;
+
+/// Sent after every pause, not once: Viktor resumes its thread only on a new message.
+pub(super) const PAUSED_TURN_CONTINUE_REMINDER_BODY: &str = "Your previous response was stopped by the \
+     server's time limit before you finished. Continue from exactly where it stopped — or if a newer \
+     user message follows this note, answer that instead.";
+
 /// Pure form of [`SessionActor::length_salvage_budget`].
 /// Kill switches are absolute and outrank every tier, including the always-on cursor one: an explicit `VKTR_LENGTH_SALVAGE=0` locally, and the remote `length_salvage_budget = 0` fleet-wide.
 /// Otherwise the precedence is cursor, then env opt-in, then remote budget, then off.

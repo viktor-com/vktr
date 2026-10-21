@@ -32,6 +32,33 @@ const INCOMPLETE_REASON_MAX_PROMPT_TOKENS: &str = "max_prompt_tokens";
 /// A server-side time limit cut generation short (xAI extension).
 const INCOMPLETE_REASON_MAX_TIME_LIMIT: &str = "max_time_limit";
 
+/// vktr: Viktor's compat API ends a run its time limit cut off with this note (its `CAP_REACHED_NOTE`), sent as one text
+/// delta before a `max_output_tokens` incomplete. The run is paused, not out of tokens: the turn loop continues it.
+const VIKTOR_TIME_LIMIT_NOTE_PREFIX: &str = "[Viktor stopped here:";
+
+fn is_viktor_time_limit_note(delta: &str) -> bool {
+    delta
+        .trim_start()
+        .starts_with(VIKTOR_TIME_LIMIT_NOTE_PREFIX)
+}
+
+/// Drops the time-limit note from the end of the reply's text, so neither the history nor the next request carries it.
+fn strip_viktor_time_limit_note(response: &mut rs::Response, note: &str) {
+    for item in response.output.iter_mut().rev() {
+        if let rs::OutputItem::Message(message) = item {
+            for content in message.content.iter_mut().rev() {
+                if let rs::OutputMessageContent::OutputText(text) = content {
+                    if let Some(kept) = text.text.strip_suffix(note) {
+                        let kept = kept.trim_end().len();
+                        text.text.truncate(kept);
+                    }
+                    return;
+                }
+            }
+        }
+    }
+}
+
 /// Returns whether a Responses API event reflects real model progress rather than a liveness-only heartbeat or status transition.
 pub(crate) fn responses_event_has_meaningful_content(event: &rs::ResponseStreamEvent) -> bool {
     use rs::ResponseStreamEvent;
@@ -247,6 +274,8 @@ pub(crate) fn stream_responses_tracked<'a>(
         let mut first_token_emitted = false;
         let mut reasoning_acc = String::new();
         let mut last_content_chunk_at = Instant::now();
+        // A text delta that looks like Viktor's time-limit note, held back until the terminal event says whether the run was cut
+        let mut held_viktor_note: Option<String> = None;
 
         // Maps Responses API `output_index` to our tool-only `tool_index`.
         // Populated when `ResponseOutputItemAdded` carries a `FunctionCall`
@@ -333,7 +362,12 @@ pub(crate) fn stream_responses_tracked<'a>(
 
             match event {
                 ResponseStreamEvent::ResponseOutputTextDelta(text_delta_event) => {
-                    let delta = text_delta_event.delta;
+                    let mut delta = text_delta_event.delta;
+                    if is_viktor_time_limit_note(&delta) {
+                        held_viktor_note = Some(std::mem::take(&mut delta));
+                    } else if let Some(held) = held_viktor_note.take() {
+                        delta.insert_str(0, &held);
+                    }
                     if !delta.is_empty() {
                         if !first_token_emitted {
                             first_token_emitted = true;
@@ -640,6 +674,31 @@ pub(crate) fn stream_responses_tracked<'a>(
             .as_ref()
             .map(|d| d.reason.clone());
 
+        let viktor_paused = matches!(status, Status::Incomplete)
+            && incomplete_reason.as_deref() == Some(INCOMPLETE_REASON_MAX_OUTPUT_TOKENS)
+            && held_viktor_note.is_some();
+        if let Some(note) = held_viktor_note.take() {
+            if viktor_paused {
+                strip_viktor_time_limit_note(&mut response, &note);
+            } else {
+                // Not a cut run after all: the held text is ordinary reply text
+                if !first_token_emitted {
+                    yield SamplingEvent::FirstToken {
+                        request_id: request_id.clone(),
+                    };
+                }
+                chunk_timestamps.push(Instant::now());
+                chunk_index += 1;
+                message_chunk_count += 1;
+                yield SamplingEvent::ChannelToken {
+                    request_id: request_id.clone(),
+                    channel: SamplingChannel::Text,
+                    text: note,
+                    chunk_index,
+                };
+            }
+        }
+
         // Convert to ConversationItem(s); patch in accumulated reasoning text as a fallback when the final response lacks `content` or `summary`
         // The streaming deltas may have arrived out of band
         // Splice policy lives in `inject_streaming_reasoning_fallback`.
@@ -660,6 +719,17 @@ pub(crate) fn stream_responses_tracked<'a>(
                     // A moderation cut ("content_filter") maps to ContentFilter, not Length
                     // A filter-cut response must never be salvaged and continued by `LengthPolicy`
                     Some(INCOMPLETE_REASON_CONTENT_FILTER) => (StopReason::ContentFilter, None),
+                    // Viktor's time limit paused the run: Messages' `pause_turn` is exactly that
+                    Some(INCOMPLETE_REASON_MAX_OUTPUT_TOKENS) if viktor_paused => {
+                        tracing::info!(
+                            request_id = %request_id,
+                            "Viktor paused the run at its time limit"
+                        );
+                        (
+                            StopReason::Length,
+                            Some(messages_types::StopReason::PauseTurn),
+                        )
+                    }
                     Some(INCOMPLETE_REASON_MAX_OUTPUT_TOKENS) => (
                         StopReason::Length,
                         Some(messages_types::StopReason::MaxTokens),
@@ -1005,6 +1075,123 @@ mod tests {
             stop_reasons_for_incomplete("max_time_limit").await,
             (Some(StopReason::Length), None)
         );
+    }
+
+    /// Viktor's compat API `CAP_REACHED_NOTE` as the wire carries it after earlier reply text.
+    const VIKTOR_NOTE: &str = "\n\n[Viktor stopped here: this request reached its time limit before the work \
+         was finished. Work already done in Viktor's workspace is kept. Ask Viktor to continue to pick up from there.]";
+
+    fn message_output(text: &str) -> rs_types::OutputItem {
+        rs_types::OutputItem::Message(rs_types::OutputMessage {
+            content: vec![rs_types::OutputMessageContent::OutputText(
+                rs_types::OutputTextContent {
+                    annotations: vec![],
+                    logprobs: None,
+                    text: text.into(),
+                },
+            )],
+            id: "msg_1".into(),
+            role: rs_types::AssistantRole::Assistant,
+            status: rs_types::OutputStatus::Incomplete,
+        })
+    }
+
+    /// Text tokens and the final response for a stream of text deltas ending in `terminal`.
+    async fn text_and_response(
+        deltas: &[&str],
+        terminal: rs::ResponseStreamEvent,
+    ) -> (Vec<String>, ConversationResponse) {
+        let mut raw: Vec<Result<rs::ResponseStreamEvent, SamplingError>> =
+            deltas.iter().map(|d| Ok(text_delta_event(d))).collect();
+        raw.push(Ok(terminal));
+        let events = collect(stream_responses(
+            stream::iter(raw).boxed(),
+            None,
+            rid(),
+            Duration::from_secs(60),
+            None,
+        ))
+        .await;
+        let text = events
+            .iter()
+            .filter_map(|e| match e {
+                SamplingEvent::ChannelToken {
+                    channel: SamplingChannel::Text,
+                    text,
+                    ..
+                } => Some(text.clone()),
+                _ => None,
+            })
+            .collect();
+        match events.into_iter().last() {
+            Some(SamplingEvent::Completed { response, .. }) => (text, *response),
+            other => panic!("expected Completed, got {other:?}"),
+        }
+    }
+
+    /// Viktor's time limit cuts a run as `max_output_tokens` plus a closing note: that is a paused turn, and the note is
+    /// neither shown nor kept. A real token cut without the note stays a plain Length cut.
+    #[tokio::test]
+    async fn viktors_time_limit_note_marks_a_paused_turn_and_is_dropped() {
+        let mut cut = build_response(rs_types::Status::Incomplete);
+        cut.incomplete_details = Some(rs_types::IncompleteDetails {
+            reason: "max_output_tokens".into(),
+        });
+        let mut paused = cut.clone();
+        paused.output = vec![message_output(&format!(
+            "Rendering the logos.{VIKTOR_NOTE}"
+        ))];
+        let (text, response) = text_and_response(
+            &["Rendering the logos.", VIKTOR_NOTE],
+            rs::ResponseStreamEvent::ResponseIncomplete(rs_types::ResponseIncompleteEvent {
+                response: paused,
+                sequence_number: 0,
+            }),
+        )
+        .await;
+        assert_eq!(text, vec!["Rendering the logos."]);
+        assert!(response.is_paused_turn());
+        assert_eq!(response.raw_stop_reason.as_deref(), Some("pause_turn"));
+        assert_eq!(response.assistant_text(), "Rendering the logos.");
+
+        // A run cut before it wrote anything sends the note alone
+        let mut silent = cut.clone();
+        silent.output = vec![message_output(VIKTOR_NOTE.trim_start())];
+        let (text, response) = text_and_response(
+            &[VIKTOR_NOTE.trim_start()],
+            rs::ResponseStreamEvent::ResponseIncomplete(rs_types::ResponseIncompleteEvent {
+                response: silent,
+                sequence_number: 0,
+            }),
+        )
+        .await;
+        assert!(text.is_empty());
+        assert!(response.is_paused_turn());
+        assert_eq!(response.assistant_text(), "");
+
+        let mut token_cut = cut;
+        token_cut.output = vec![message_output("partial")];
+        let (text, response) = text_and_response(
+            &["partial"],
+            rs::ResponseStreamEvent::ResponseIncomplete(rs_types::ResponseIncompleteEvent {
+                response: token_cut,
+                sequence_number: 0,
+            }),
+        )
+        .await;
+        assert_eq!(text, vec!["partial"]);
+        assert!(!response.is_paused_turn());
+        assert_eq!(response.raw_stop_reason.as_deref(), Some("max_tokens"));
+    }
+
+    /// Note-like text that is not the end of a cut run is ordinary reply text and is shown in full.
+    #[tokio::test]
+    async fn note_like_text_in_a_finished_reply_is_shown() {
+        let (text, response) = text_and_response(&["a", VIKTOR_NOTE], completed_event()).await;
+        assert_eq!(text.concat(), format!("a{VIKTOR_NOTE}"));
+        assert!(!response.is_paused_turn());
+        let (text, _) = text_and_response(&[VIKTOR_NOTE, " more"], completed_event()).await;
+        assert_eq!(text.concat(), format!("{VIKTOR_NOTE} more"));
     }
 
     /// A moderation cut maps to ContentFilter, never Length: a filter-cut response must not be salvaged and continued by `LengthPolicy`.

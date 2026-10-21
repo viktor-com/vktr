@@ -2672,6 +2672,7 @@ impl SessionActor {
         let mut identical_tool_calls = IdenticalToolCallRun::default();
         let mut todo_gate_fires: u32 = 0;
         let mut length_salvage_streak = LengthSalvageStreak::default();
+        let mut paused_turn_continues: u32 = 0;
         let mut auth_retry_schedule = AuthRetrySchedule::new();
         let mut rate_limit_waits = self.rate_limit_wait_budget(
             sampling_config
@@ -3416,6 +3417,7 @@ impl SessionActor {
             }
             let fallback_text = response.fallback_text();
             let stop_reason = response.stop_reason;
+            let paused_turn = response.is_paused_turn();
             let response_is_empty = response.is_empty();
             let turn_refused =
                 stop_reason == Some(xai_grok_sampling_types::StopReason::ContentFilter);
@@ -3485,6 +3487,38 @@ impl SessionActor {
                 .await;
             }
             self.send_buffered_xai_update(response_completed).await;
+            if paused_turn && tool_calls.is_empty() {
+                if paused_turn_continues < super::length_salvage::PAUSED_TURN_CONTINUE_BUDGET {
+                    paused_turn_continues += 1;
+                    let tag = self.reminder_wrapper_tag();
+                    self.chat_state_handle.push_user_message(
+                        ConversationItem::length_continue_reminder(format!(
+                            "<{tag}>{}</{tag}>",
+                            super::length_salvage::PAUSED_TURN_CONTINUE_REMINDER_BODY
+                        )),
+                    );
+                    tracing::info!(
+                        session_id = %self.session_info.id,
+                        continues = paused_turn_continues,
+                        max = super::length_salvage::PAUSED_TURN_CONTINUE_BUDGET,
+                        "Run paused at the server's time limit — continuing"
+                    );
+                    xai_grok_telemetry::unified_log::info(
+                        "shell.turn.paused_turn_continue",
+                        Some(self.session_info.id.0.as_ref()),
+                        Some(serde_json::json!({
+                            "continue_attempts": paused_turn_continues,
+                            "continue_budget": super::length_salvage::PAUSED_TURN_CONTINUE_BUDGET,
+                        })),
+                    );
+                    continue;
+                }
+                tracing::warn!(
+                    session_id = %self.session_info.id,
+                    continues = paused_turn_continues,
+                    "Paused-run continues exhausted, completing the turn truncated"
+                );
+            }
             let schema_complete_at_cap = if stop_reason
                 == Some(xai_grok_sampling_types::StopReason::Length)
                 && tool_calls.is_empty()

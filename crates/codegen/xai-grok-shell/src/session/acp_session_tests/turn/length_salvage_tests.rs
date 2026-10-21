@@ -455,3 +455,140 @@ fn messages_stop_sse(text: &str) -> ScriptedResponse {
             .collect(),
     )
 }
+/// Viktor's compat API `CAP_REACHED_NOTE`, the closing delta of a run its time limit cut off.
+const VIKTOR_CAP_NOTE: &str = "[Viktor stopped here: this request reached its time limit before the work \
+     was finished. Work already done in Viktor's workspace is kept. Ask Viktor to continue to pick up from there.]";
+/// Responses SSE ending `response.incomplete` with `max_output_tokens`, as Viktor's compat API sends it.
+/// `with_note` adds the cap note Viktor sends when its run time limit, not the token budget, ended the run.
+fn responses_incomplete_sse(text: &str, with_note: bool) -> ScriptedResponse {
+    let note = match (with_note, text.is_empty()) {
+        (false, _) => String::new(),
+        (true, true) => VIKTOR_CAP_NOTE.to_string(),
+        (true, false) => format!("\n\n{VIKTOR_CAP_NOTE}"),
+    };
+    let delta = |seq: u32, delta: &str| {
+        serde_json::json!({
+            "type": "response.output_text.delta", "sequence_number": seq,
+            "item_id": "msg_cut", "output_index": 0, "content_index": 0, "delta": delta
+        })
+    };
+    let mut events = vec![serde_json::json!({
+        "type": "response.created", "sequence_number": 0,
+        "response": {
+            "id": "resp_cut", "object": "response", "created_at": 1234567890,
+            "model": "test", "status": "in_progress", "output": []
+        }
+    })];
+    for (seq, part) in [text, note.as_str()].into_iter().enumerate() {
+        if !part.is_empty() {
+            events.push(delta(seq as u32 + 1, part));
+        }
+    }
+    events.push(serde_json::json!({
+        "type": "response.incomplete", "sequence_number": 3,
+        "response": {
+            "id": "resp_cut", "object": "response", "created_at": 1234567890,
+            "model": "test", "status": "incomplete",
+            "incomplete_details": { "reason": "max_output_tokens" },
+            "output": [{
+                "type": "message", "id": "msg_cut", "role": "assistant", "status": "incomplete",
+                "content": [{ "type": "output_text", "text": format!("{text}{note}"), "annotations": [] }]
+            }],
+            "usage": {
+                "input_tokens": 10, "output_tokens": 5, "total_tokens": 15,
+                "input_tokens_details": { "cached_tokens": 0 },
+                "output_tokens_details": { "reasoning_tokens": 0 }
+            }
+        }
+    }));
+    let mut scripted: Vec<SseEvent> = events
+        .into_iter()
+        .map(|e| SseEvent::data(e.to_string()))
+        .collect();
+    scripted.push(SseEvent::data("[DONE]".to_string()));
+    ScriptedResponse::sse(scripted)
+}
+/// A Viktor run cut by its time limit continues on its own, with salvage off and no user input: each cut reply is kept
+/// without the note, a continue message follows it, and the turn ends with the final answer, not a truncation error.
+#[test]
+fn a_run_paused_at_viktors_time_limit_continues_on_its_own() {
+    if xai_grok_config::env_bool("VKTR_LENGTH_SALVAGE") == Some(true) {
+        panic!("ambient VKTR_LENGTH_SALVAGE=1 would mask that this path needs no salvage gate");
+    }
+    block_on_session(|| {
+        current_thread_local(async {
+            let server = MockInferenceServer::start().await.expect("mock server");
+            server.enqueue_response(
+                "/v1/responses",
+                responses_incomplete_sse("Rendering the logos.", true),
+            );
+            server.enqueue_response("/v1/responses", responses_incomplete_sse("", true));
+            server.enqueue_response(
+                "/v1/responses",
+                ScriptedResponse::sse(xai_grok_test_support::sse::responses_api_script_exact(
+                    "All four logos are done.",
+                    "test",
+                )),
+            );
+            let actor = salvage_test_actor_on_backend(
+                &server,
+                0,
+                256_000,
+                xai_grok_sampling_types::ApiBackend::Responses,
+            )
+            .await;
+            let outcome = run_prompt(&actor, "paused-turn").await;
+            let ok = outcome.expect("a paused run continues instead of failing the turn");
+            assert_eq!(ok.stop_reason, acp::StopReason::EndTurn);
+            let conv = actor.chat_state_handle.get_conversation().await;
+            let all_text: Vec<String> = conv.iter().map(|i| i.text_content()).collect();
+            assert!(
+                !all_text.iter().any(|t| t.contains("Viktor stopped here")),
+                "the cap note is never kept: {all_text:#?}"
+            );
+            let continues = all_text
+                .iter()
+                .filter(|t| t.contains("stopped by the server's time limit"))
+                .count();
+            assert_eq!(continues, 2, "one continue per pause: {all_text:#?}");
+            assert!(all_text.iter().any(|t| t == "Rendering the logos."));
+            assert!(
+                all_text
+                    .last()
+                    .is_some_and(|t| t == "All four logos are done."),
+                "the final answer ends the turn: {all_text:#?}"
+            );
+        });
+    });
+}
+/// On the Responses backend too, a real token cut (no cap note) is still the truncation failure.
+#[test]
+fn a_responses_token_cut_still_fails_as_truncated() {
+    if xai_grok_config::env_bool("VKTR_LENGTH_SALVAGE") == Some(true) {
+        panic!("ambient VKTR_LENGTH_SALVAGE=1 would flip the gate under test");
+    }
+    block_on_session(|| {
+        current_thread_local(async {
+            let server = MockInferenceServer::start().await.expect("mock server");
+            server.enqueue_response(
+                "/v1/responses",
+                responses_incomplete_sse("one, two,", false),
+            );
+            let actor = salvage_test_actor_on_backend(
+                &server,
+                0,
+                256_000,
+                xai_grok_sampling_types::ApiBackend::Responses,
+            )
+            .await;
+            let err = run_prompt(&actor, "responses-token-cut")
+                .await
+                .expect_err("a token cut must still fail the turn");
+            let err_str = format!("{err:?}");
+            assert!(
+                err_str.contains("max_tokens") || err_str.contains("max tokens"),
+                "the failure must be the max-tokens truncation error: {err_str}"
+            );
+        });
+    });
+}

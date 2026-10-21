@@ -2111,6 +2111,10 @@ impl SamplingClient {
                         Ok(rs::ResponseStreamEvent::ResponseCompleted(done)) => {
                             crate::viktor_continuation::record(&pending, &done.response.id);
                         }
+                        // A cut run's reply is in the thread too, so the next request continues after it
+                        Ok(rs::ResponseStreamEvent::ResponseIncomplete(cut)) => {
+                            crate::viktor_continuation::record(&pending, &cut.response.id);
+                        }
                         Ok(rs::ResponseStreamEvent::ResponseFailed(_)) | Err(_) => {
                             crate::viktor_continuation::forget(pending.conv_id());
                         }
