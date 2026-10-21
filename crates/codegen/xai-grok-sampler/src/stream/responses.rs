@@ -678,10 +678,15 @@ pub(crate) fn stream_responses_tracked<'a>(
             && incomplete_reason.as_deref() == Some(INCOMPLETE_REASON_MAX_OUTPUT_TOKENS)
             && held_viktor_note.is_some();
         if let Some(note) = held_viktor_note.take() {
-            if viktor_paused {
+            // Not a cut run after all: the held text is ordinary reply text. A cut run shows only the paragraph break
+            // before its note, so the continuation's text starts a new paragraph instead of running on.
+            let shown = if viktor_paused {
                 strip_viktor_time_limit_note(&mut response, &note);
+                note[..note.len() - note.trim_start().len()].to_owned()
             } else {
-                // Not a cut run after all: the held text is ordinary reply text
+                note
+            };
+            if !shown.is_empty() {
                 if !first_token_emitted {
                     yield SamplingEvent::FirstToken {
                         request_id: request_id.clone(),
@@ -693,7 +698,7 @@ pub(crate) fn stream_responses_tracked<'a>(
                 yield SamplingEvent::ChannelToken {
                     request_id: request_id.clone(),
                     channel: SamplingChannel::Text,
-                    text: note,
+                    text: shown,
                     chunk_index,
                 };
             }
@@ -1149,7 +1154,11 @@ mod tests {
             }),
         )
         .await;
-        assert_eq!(text, vec!["Rendering the logos."]);
+        assert_eq!(
+            text.concat(),
+            "Rendering the logos.\n\n",
+            "only the break before the note is shown"
+        );
         assert!(response.is_paused_turn());
         assert_eq!(response.raw_stop_reason.as_deref(), Some("pause_turn"));
         assert_eq!(response.assistant_text(), "Rendering the logos.");
