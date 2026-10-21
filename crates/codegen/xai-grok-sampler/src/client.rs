@@ -2101,17 +2101,6 @@ impl SamplingClient {
         }
 
         let result = self.create_response_stream(wrapper).await;
-        let result = if crate::viktor_continuation::is_viktor_model(&effective_model) {
-            result.map(|(stream, metadata, doom_loop)| {
-                (
-                    crate::stream::responses::viktor_cap_note_filter(stream),
-                    metadata,
-                    doom_loop,
-                )
-            })
-        } else {
-            result
-        };
         let Some(pending) = continuation else {
             return result;
         };
@@ -2142,6 +2131,13 @@ impl SamplingClient {
                 Err(pending.recover(err))
             }
         }
+    }
+
+    /// True when `request` goes to the Viktor compat API (its model, or the default, is a Viktor model).
+    pub(crate) fn is_viktor_request(&self, request: &ConversationRequest) -> bool {
+        crate::viktor_continuation::is_viktor_model(
+            request.model.as_deref().unwrap_or(&self.defaults.model),
+        )
     }
 
     /// Send a conversation request using the Responses API (non-streaming).

@@ -31,17 +31,10 @@ const INCOMPLETE_REASON_MAX_OUTPUT_TOKENS: &str = "max_output_tokens";
 const INCOMPLETE_REASON_MAX_PROMPT_TOKENS: &str = "max_prompt_tokens";
 /// A server-side time limit cut generation short (xAI extension).
 const INCOMPLETE_REASON_MAX_TIME_LIMIT: &str = "max_time_limit";
-/// vktr: the reason [`viktor_cap_note_filter`] gives a Viktor run its time limit paused. Never on the wire.
-const INCOMPLETE_REASON_VIKTOR_PAUSED: &str = "vktr_viktor_paused";
-
 /// Viktor's compat API `CAP_REACHED_NOTE`: the last text delta of a run its time limit (not the token budget) cut,
 /// alone or after a blank line.
 const VIKTOR_CAP_REACHED_NOTE: &str = "[Viktor stopped here: this request reached its time limit before the work \
      was finished. Work already done in Viktor's workspace is kept. Ask Viktor to continue to pick up from there.]";
-
-/// How long a held note waits for the event after it. Viktor sends the note and the `incomplete` in one flush, so a
-/// note followed by nothing for this long is reply text, released well before the decoder's idle timeout can fire.
-const VIKTOR_CAP_NOTE_HOLD: Duration = Duration::from_secs(5);
 
 fn is_viktor_cap_note(delta: &str) -> bool {
     delta.strip_prefix("\n\n").unwrap_or(delta) == VIKTOR_CAP_REACHED_NOTE
@@ -64,85 +57,35 @@ fn strip_viktor_cap_note(response: &mut rs::Response) {
     }
 }
 
-/// vktr, for the Viktor backend only: holds back a text delta that is exactly Viktor's cap note. When the response then
-/// ends `incomplete` (`max_output_tokens`) with no text after the note, Viktor's time limit paused the run: the note is
-/// dropped (only the blank line before it is kept, so the continuation starts a new paragraph) and the reason becomes
-/// [`INCOMPLETE_REASON_VIKTOR_PAUSED`]. Any later text delta, other terminal event, error, end of stream or
-/// [`VIKTOR_CAP_NOTE_HOLD`] of silence releases the held delta unchanged.
-pub(crate) fn viktor_cap_note_filter<'a>(
-    raw: BoxStream<'a, Result<rs::ResponseStreamEvent, SamplingError>>,
-) -> BoxStream<'a, Result<rs::ResponseStreamEvent, SamplingError>> {
-    use rs::ResponseStreamEvent as Event;
-    async_stream::stream! {
-        let mut raw = raw;
-        let mut held: Option<rs::ResponseTextDeltaEvent> = None;
-        loop {
-            let next = if held.is_some() {
-                match tokio::time::timeout(VIKTOR_CAP_NOTE_HOLD, raw.next()).await {
-                    Ok(next) => next,
-                    Err(_) => {
-                        if let Some(earlier) = held.take() {
-                            yield Ok(Event::ResponseOutputTextDelta(earlier));
-                        }
-                        continue;
-                    }
-                }
-            } else {
-                raw.next().await
-            };
-            let Some(item) = next else { break };
-            match item {
-                Ok(Event::ResponseOutputTextDelta(delta)) if is_viktor_cap_note(&delta.delta) => {
-                    if let Some(earlier) = held.replace(delta) {
-                        yield Ok(Event::ResponseOutputTextDelta(earlier));
-                    }
-                }
-                Ok(Event::ResponseIncomplete(mut incomplete))
-                    if held.is_some()
-                        && incomplete
-                            .response
-                            .incomplete_details
-                            .as_ref()
-                            .is_some_and(|d| d.reason == INCOMPLETE_REASON_MAX_OUTPUT_TOKENS) =>
-                {
-                    if let Some(mut note) = held.take() {
-                        note.delta.truncate(note.delta.len() - VIKTOR_CAP_REACHED_NOTE.len());
-                        if !note.delta.is_empty() {
-                            yield Ok(Event::ResponseOutputTextDelta(note));
-                        }
-                    }
-                    strip_viktor_cap_note(&mut incomplete.response);
-                    incomplete.response.incomplete_details = Some(rs::IncompleteDetails {
-                        reason: INCOMPLETE_REASON_VIKTOR_PAUSED.into(),
-                    });
-                    yield Ok(Event::ResponseIncomplete(incomplete));
-                }
-                Ok(
-                    event @ (Event::ResponseOutputTextDelta(_)
-                    | Event::ResponseCompleted(_)
-                    | Event::ResponseIncomplete(_)
-                    | Event::ResponseFailed(_)
-                    | Event::ResponseError(_)),
-                ) => {
-                    if let Some(earlier) = held.take() {
-                        yield Ok(Event::ResponseOutputTextDelta(earlier));
-                    }
-                    yield Ok(event);
-                }
-                Ok(event) => yield Ok(event),
-                Err(err) => {
-                    if let Some(earlier) = held.take() {
-                        yield Ok(Event::ResponseOutputTextDelta(earlier));
-                    }
-                    yield Err(err);
-                }
-            }
-        }
-        if let Some(earlier) = held {
-            yield Ok(Event::ResponseOutputTextDelta(earlier));
-        }
+/// Emits the held text: a cap note given back as reply text, or the blank line kept from a dropped one.
+fn release_held_note(
+    held: &mut Option<String>,
+    request_id: &RequestId,
+    first_token_emitted: &mut bool,
+    chunk_index: &mut u64,
+    message_chunk_count: &mut u64,
+    chunk_timestamps: &mut Vec<Instant>,
+) -> Vec<SamplingEvent> {
+    let Some(text) = held.take().filter(|t| !t.is_empty()) else {
+        return Vec::new();
+    };
+    let mut events = Vec::new();
+    if !*first_token_emitted {
+        *first_token_emitted = true;
+        events.push(SamplingEvent::FirstToken {
+            request_id: request_id.clone(),
+        });
     }
-    .boxed()
+    chunk_timestamps.push(Instant::now());
+    *chunk_index += 1;
+    *message_chunk_count += 1;
+    events.push(SamplingEvent::ChannelToken {
+        request_id: request_id.clone(),
+        channel: SamplingChannel::Text,
+        text,
+        chunk_index: *chunk_index,
+    });
+    events
 }
 
 /// Returns whether a Responses API event reflects real model progress rather than a liveness-only heartbeat or status transition.
@@ -317,9 +260,15 @@ pub fn stream_responses<'a>(
         doom_loop,
         Arc::new(AtomicBool::new(false)),
         FailedResponseCapture::default(),
+        false,
     )
 }
 
+/// `viktor_cap_note` (the Viktor backend only) holds back a text delta that is exactly Viktor's cap note. When the
+/// response then ends `incomplete` (`max_output_tokens`) with no text after it, Viktor's time limit paused the run: the
+/// note is dropped (only the blank line before it is shown) and the response is a paused turn (`Length` + `pause_turn`).
+/// Anything else gives the held note back as reply text, also on every failure exit, before the failure is reported.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn stream_responses_tracked<'a>(
     raw_stream: BoxStream<'a, Result<rs::ResponseStreamEvent, SamplingError>>,
     model_metadata: Option<ResponseModelMetadata>,
@@ -328,6 +277,7 @@ pub(crate) fn stream_responses_tracked<'a>(
     doom_loop: Option<crate::doom_loop::DoomLoopSignalCollector>,
     output_observed: Arc<AtomicBool>,
     failed_response: FailedResponseCapture,
+    viktor_cap_note: bool,
 ) -> impl Stream<Item = SamplingEvent> + Send + 'a {
     async_stream::stream! {
         use rs::{ResponseStreamEvent, Status};
@@ -358,6 +308,7 @@ pub(crate) fn stream_responses_tracked<'a>(
         let mut chunk_index: u64 = 0;
         let mut message_chunk_count: u64 = 0;
         let mut first_token_emitted = false;
+        let mut held_note: Option<String> = None;
         let mut reasoning_acc = String::new();
         let mut last_content_chunk_at = Instant::now();
 
@@ -376,6 +327,9 @@ pub(crate) fn stream_responses_tracked<'a>(
                     let err = SamplingError::IdleTimeout {
                         elapsed_secs: idle_timeout.as_secs(),
                     };
+                    for event in release_held_note(&mut held_note, &request_id, &mut first_token_emitted, &mut chunk_index, &mut message_chunk_count, &mut chunk_timestamps) {
+                        yield event;
+                    }
                     yield SamplingEvent::Failed {
                         request_id: request_id.clone(),
                         error: SamplingErrorInfo::from(&err),
@@ -387,6 +341,9 @@ pub(crate) fn stream_responses_tracked<'a>(
             let event = match event_result {
                 Ok(event) => event,
                 Err(err) => {
+                    for event in release_held_note(&mut held_note, &request_id, &mut first_token_emitted, &mut chunk_index, &mut message_chunk_count, &mut chunk_timestamps) {
+                        yield event;
+                    }
                     yield SamplingEvent::Failed {
                         request_id: request_id.clone(),
                         error: SamplingErrorInfo::from(&err),
@@ -432,6 +389,9 @@ pub(crate) fn stream_responses_tracked<'a>(
                     triggers,
                     aborted_at_chunk: Some(chunk_index),
                 };
+                for event in release_held_note(&mut held_note, &request_id, &mut first_token_emitted, &mut chunk_index, &mut message_chunk_count, &mut chunk_timestamps) {
+                    yield event;
+                }
                 yield SamplingEvent::Failed {
                     request_id: request_id.clone(),
                     error: SamplingErrorInfo::from(&err),
@@ -446,7 +406,13 @@ pub(crate) fn stream_responses_tracked<'a>(
 
             match event {
                 ResponseStreamEvent::ResponseOutputTextDelta(text_delta_event) => {
-                    let delta = text_delta_event.delta;
+                    let mut delta = text_delta_event.delta;
+                    for event in release_held_note(&mut held_note, &request_id, &mut first_token_emitted, &mut chunk_index, &mut message_chunk_count, &mut chunk_timestamps) {
+                        yield event;
+                    }
+                    if viktor_cap_note && is_viktor_cap_note(&delta) {
+                        held_note = Some(std::mem::take(&mut delta));
+                    }
                     if !delta.is_empty() {
                         if !first_token_emitted {
                             first_token_emitted = true;
@@ -570,6 +536,9 @@ pub(crate) fn stream_responses_tracked<'a>(
                             .as_ref()
                             .map(|e| xai_grok_sampling_types::ApiErrorCode::parse(&e.code)),
                     };
+                    for event in release_held_note(&mut held_note, &request_id, &mut first_token_emitted, &mut chunk_index, &mut message_chunk_count, &mut chunk_timestamps) {
+                        yield event;
+                    }
                     yield SamplingEvent::Failed {
                         request_id: request_id.clone(),
                         error: SamplingErrorInfo::from(&err),
@@ -595,6 +564,9 @@ pub(crate) fn stream_responses_tracked<'a>(
                             .as_deref()
                             .map(xai_grok_sampling_types::ApiErrorCode::parse),
                     };
+                    for event in release_held_note(&mut held_note, &request_id, &mut first_token_emitted, &mut chunk_index, &mut message_chunk_count, &mut chunk_timestamps) {
+                        yield event;
+                    }
                     yield SamplingEvent::Failed {
                         request_id: request_id.clone(),
                         error: SamplingErrorInfo::from(&err),
@@ -693,6 +665,9 @@ pub(crate) fn stream_responses_tracked<'a>(
                 let err = SamplingError::IdleTimeout {
                     elapsed_secs: idle_timeout.as_secs(),
                 };
+                for event in release_held_note(&mut held_note, &request_id, &mut first_token_emitted, &mut chunk_index, &mut message_chunk_count, &mut chunk_timestamps) {
+                    yield event;
+                }
                 yield SamplingEvent::Failed {
                     request_id: request_id.clone(),
                     error: SamplingErrorInfo::from(&err),
@@ -720,6 +695,9 @@ pub(crate) fn stream_responses_tracked<'a>(
                     // Synthesized client-side; no wire envelope to read.
                     error_code: None,
                 };
+                for event in release_held_note(&mut held_note, &request_id, &mut first_token_emitted, &mut chunk_index, &mut message_chunk_count, &mut chunk_timestamps) {
+                    yield event;
+                }
                 yield SamplingEvent::Failed {
                     request_id: request_id.clone(),
                     error: SamplingErrorInfo::from(&err),
@@ -753,6 +731,17 @@ pub(crate) fn stream_responses_tracked<'a>(
             .as_ref()
             .map(|d| d.reason.clone());
 
+        let viktor_paused = held_note.is_some()
+            && matches!(status, Status::Incomplete)
+            && incomplete_reason.as_deref() == Some(INCOMPLETE_REASON_MAX_OUTPUT_TOKENS);
+        if viktor_paused && let Some(note) = held_note.as_mut() {
+            strip_viktor_cap_note(&mut response);
+            note.truncate(note.len() - VIKTOR_CAP_REACHED_NOTE.len());
+        }
+        for event in release_held_note(&mut held_note, &request_id, &mut first_token_emitted, &mut chunk_index, &mut message_chunk_count, &mut chunk_timestamps) {
+            yield event;
+        }
+
         // Convert to ConversationItem(s); patch in accumulated reasoning text as a fallback when the final response lacks `content` or `summary`
         // The streaming deltas may have arrived out of band
         // Splice policy lives in `inject_streaming_reasoning_fallback`.
@@ -774,7 +763,7 @@ pub(crate) fn stream_responses_tracked<'a>(
                     // A filter-cut response must never be salvaged and continued by `LengthPolicy`
                     Some(INCOMPLETE_REASON_CONTENT_FILTER) => (StopReason::ContentFilter, None),
                     // Viktor's time limit paused the run: Messages' `pause_turn` is exactly that
-                    Some(INCOMPLETE_REASON_VIKTOR_PAUSED) => {
+                    Some(INCOMPLETE_REASON_MAX_OUTPUT_TOKENS) if viktor_paused => {
                         tracing::info!(
                             request_id = %request_id,
                             "Viktor paused the run at its time limit"
@@ -1025,6 +1014,7 @@ mod tests {
                 Some(collector),
                 Arc::new(AtomicBool::new(false)),
                 capture.clone(),
+                false,
             ))
             .await;
 
@@ -1159,21 +1149,20 @@ mod tests {
         })
     }
 
-    /// Text tokens and the final response for `items`, through [`viktor_cap_note_filter`] when `viktor`.
+    /// Text tokens and the final response for `items`, decoded as the Viktor backend when `viktor`.
     async fn text_and_response(
         items: Vec<Result<rs::ResponseStreamEvent, SamplingError>>,
         viktor: bool,
     ) -> (String, Option<ConversationResponse>) {
-        let mut raw = stream::iter(items).boxed();
-        if viktor {
-            raw = viktor_cap_note_filter(raw);
-        }
-        let events = collect(stream_responses(
-            raw,
+        let events = collect(stream_responses_tracked(
+            stream::iter(items).boxed(),
             None,
             rid(),
             Duration::from_secs(60),
             None,
+            Arc::new(AtomicBool::new(false)),
+            FailedResponseCapture::default(),
+            viktor,
         ))
         .await;
         let text = events
@@ -1285,29 +1274,27 @@ mod tests {
         assert_eq!(text, note);
         assert!(response.is_none());
 
-        let filtered: Vec<_> = viktor_cap_note_filter(stream::iter(deltas(&[note])).boxed())
-            .collect()
-            .await;
-        assert_eq!(
-            filtered.len(),
-            1,
-            "a stream that just ends gives the note back"
-        );
+        let (text, response) = text_and_response(deltas(&[note]), true).await;
+        assert_eq!(text, note, "a stream that just ends gives the note back");
+        assert!(response.is_none());
     }
 
-    /// A note followed by silence is released before the decoder's idle timeout can fail the attempt with it held
+    /// A note followed by silence comes back as text before the idle-timeout failure, however short the timeout
     /// (review probe).
     #[tokio::test(start_paused = true)]
     async fn a_held_note_is_released_when_nothing_follows() {
         let stalled = stream::iter(deltas(&[VIKTOR_CAP_REACHED_NOTE]))
             .chain(stream::pending())
             .boxed();
-        let events = collect(stream_responses(
-            viktor_cap_note_filter(stalled),
+        let events = collect(stream_responses_tracked(
+            stalled,
             None,
             rid(),
-            Duration::from_secs(60),
+            Duration::from_millis(10),
             None,
+            Arc::new(AtomicBool::new(false)),
+            FailedResponseCapture::default(),
+            true,
         ))
         .await;
         let text: String = events
@@ -1690,6 +1677,7 @@ mod tests {
             None,
             Arc::clone(&output_observed),
             FailedResponseCapture::default(),
+            false,
         ))
         .await;
 

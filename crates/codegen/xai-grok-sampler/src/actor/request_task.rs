@@ -557,6 +557,7 @@ async fn run_one_attempt(
             .await
         }
         ApiBackend::Responses => {
+            let viktor_cap_note = client.is_viktor_request(&request);
             let (raw, metadata, doom_loop) =
                 match client.conversation_stream_responses(request).await {
                     Ok(parts) => parts,
@@ -582,6 +583,7 @@ async fn run_one_attempt(
                 doom_loop,
                 Arc::clone(&output_observed),
                 failed_response.clone(),
+                viktor_cap_note,
             );
             drive_l2(
                 l2,
