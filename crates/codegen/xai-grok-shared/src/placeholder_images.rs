@@ -540,6 +540,169 @@ pub fn recover_orphan_placeholders_with_prefixes_and_caps(
     recovered
 }
 
+/// Attach image files whose absolute path appears in the prompt prose, such as a dragged screenshot followed by a question.
+///
+/// The TUI turns a paste made only of paths into attachments; a path mixed with prose stays text, and the model then had to fetch the image with a tool call.
+/// The path text stays in the query so the model can still refer to the file.
+/// Loads go through [`load_canonical_placeholder_image`] with the placeholder allowlist plus the system temp dir (macOS writes dragged screenshot thumbnails there).
+pub fn attach_inline_image_paths(
+    query: &str,
+    raw_images: &mut Vec<agent_client_protocol::ImageContent>,
+    workspace_cwd: &Path,
+) -> usize {
+    let mut allowed = default_allowed_prefixes(workspace_cwd);
+    if let Ok(tmp) = dunce::canonicalize(std::env::temp_dir()) {
+        allowed.push(tmp);
+    }
+    attach_inline_image_paths_with_prefixes(query, raw_images, &allowed)
+}
+
+/// Variant of [`attach_inline_image_paths`] with an explicit prefix allowlist.
+/// Paths already attached (by canonical `file://` URI) or repeated in the text are attached once; the per-prompt count and aggregate-bytes caps apply.
+pub fn attach_inline_image_paths_with_prefixes(
+    query: &str,
+    raw_images: &mut Vec<agent_client_protocol::ImageContent>,
+    allowed_prefixes: &[PathBuf],
+) -> usize {
+    use base64::Engine as _;
+
+    let candidates = inline_image_path_candidates(query);
+    if candidates.is_empty() {
+        return 0;
+    }
+    let mut seen: std::collections::HashSet<PathBuf> = raw_images
+        .iter()
+        .filter_map(|img| img.uri.as_deref().and_then(canonical_from_file_uri))
+        .collect();
+    let mut attached = 0usize;
+    let mut aggregate_bytes = 0usize;
+    for candidate in candidates.into_iter().take(MAX_PLACEHOLDERS_PER_PROMPT) {
+        let Ok(canonical) = dunce::canonicalize(&candidate) else {
+            continue;
+        };
+        if !seen.insert(canonical.clone()) {
+            continue;
+        }
+        match load_canonical_placeholder_image(
+            &canonical,
+            allowed_prefixes,
+            MAX_PLACEHOLDER_IMAGE_BYTES,
+        ) {
+            Ok(loaded) => {
+                aggregate_bytes = aggregate_bytes.saturating_add(loaded.data.len());
+                if aggregate_bytes > MAX_PLACEHOLDER_AGGREGATE_BYTES {
+                    tracing::warn!(
+                        path = ?canonical,
+                        "placeholder_images: aggregate-bytes cap reached; skipping remaining inline image paths",
+                    );
+                    break;
+                }
+                let data = base64::engine::general_purpose::STANDARD.encode(&loaded.data);
+                raw_images.push(
+                    agent_client_protocol::ImageContent::new(data, loaded.mime_type)
+                        .uri(format!("file://{}", canonical.display())),
+                );
+                attached += 1;
+            }
+            Err(e) => {
+                tracing::debug!(
+                    path = ?canonical,
+                    error = %e,
+                    "placeholder_images: inline image path not attached",
+                );
+            }
+        }
+    }
+    attached
+}
+
+/// Absolute (`/`, `~/`, `file://`) paths in `text` that end in an image extension, in order of appearance.
+/// Words split on unescaped ASCII blanks; a backslash escapes the next char and a quoted word runs to its closing quote, as a terminal drag-and-drop writes them.
+/// An unescaped path with spaces (`/Users/me/Desktop/Screenshot 2026-10-21 at 16.14.49.png`) is found by joining up to 8 following words on the same line.
+fn inline_image_path_candidates(text: &str) -> Vec<PathBuf> {
+    const MAX_JOINED_WORDS: usize = 8;
+    let text = IMAGE_PLACEHOLDER_RE.replace_all(text, " ");
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let words = shell_words(line);
+        for (i, word) in words.iter().enumerate() {
+            if !(word.starts_with('/') || word.starts_with("~/") || word.starts_with("file://")) {
+                continue;
+            }
+            let mut joined = String::new();
+            for next in words.iter().skip(i).take(MAX_JOINED_WORDS + 1) {
+                if !joined.is_empty() {
+                    joined.push(' ');
+                }
+                joined.push_str(next);
+                if let Some(path) = image_path_from_word(&joined) {
+                    out.push(path);
+                    break;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Split one line into words, removing shell quoting and backslash escapes; leading brackets and quotes are dropped.
+fn shell_words(line: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut chars = line
+        .trim_start_matches(['(', '<', '`', '['])
+        .chars()
+        .peekable();
+    let mut word = String::new();
+    while let Some(c) = chars.next() {
+        match c {
+            ' ' | '\t' => {
+                if !word.is_empty() {
+                    words.push(std::mem::take(&mut word));
+                }
+                while chars
+                    .peek()
+                    .is_some_and(|c| matches!(c, '(' | '<' | '`' | '['))
+                {
+                    chars.next();
+                }
+            }
+            '\\' => match chars.next() {
+                Some(next) => word.push(next),
+                None => word.push(c),
+            },
+            '\'' | '"' if word.is_empty() => {
+                for q in chars.by_ref() {
+                    if q == c {
+                        break;
+                    }
+                    word.push(q);
+                }
+            }
+            _ => word.push(c),
+        }
+    }
+    if !word.is_empty() {
+        words.push(word);
+    }
+    words
+}
+
+/// The path a word names when, after trailing punctuation is trimmed, it ends in an allowed image extension.
+fn image_path_from_word(word: &str) -> Option<PathBuf> {
+    let word = word.trim_end_matches([')', '>', '`', ']', ',', '.', ';', ':', '!', '?', '\'', '"']);
+    let ext = Path::new(word).extension()?.to_str()?.to_ascii_lowercase();
+    if !ALLOWED_IMAGE_EXTENSIONS.contains(&ext.as_str()) {
+        return None;
+    }
+    if let Some(rest) = word.strip_prefix("file://") {
+        return Some(PathBuf::from(urlencoding::decode(rest).ok()?.as_ref()));
+    }
+    if let Some(rest) = word.strip_prefix("~/") {
+        return Some(xai_dirs::home_dir()?.join(rest));
+    }
+    Some(PathBuf::from(word))
+}
+
 /// Parse a `file://...` URI into a canonical `PathBuf`.
 /// Accepts both the relaxed unencoded form emitted by the TUI / server (see the module header) and the percent-encoded RFC 3986 form.
 /// Returns `None` if the URI does not start with `file://`; otherwise returns the canonicalised path.
@@ -1369,5 +1532,79 @@ mod tests {
                 (2, "data:image/png;base64,second".to_string()),
             ]
         );
+    }
+
+    // ----- attach_inline_image_paths -------------------------------------
+
+    fn inline(query: &str, allowed: &Path) -> Vec<agent_client_protocol::ImageContent> {
+        let prefixes = vec![dunce::canonicalize(allowed).unwrap()];
+        let mut images = Vec::new();
+        attach_inline_image_paths_with_prefixes(query, &mut images, &prefixes);
+        images
+    }
+
+    #[test]
+    fn a_dragged_screenshot_path_followed_by_prose_is_attached() {
+        // Ivan's prompt: a terminal drag escapes the spaces, then the question follows on later lines
+        let dir = tempfile::tempdir().unwrap();
+        let png = write_png(dir.path(), "Screenshot 2026-10-21 at 16.14.49.png");
+        let escaped = png.display().to_string().replace(' ', "\\ ");
+        let query =
+            format!("{escaped} \n\nI was using vktr and observed this.\nIs it to be fixed?");
+        let images = inline(&query, dir.path());
+        let [image] = images.as_slice() else {
+            panic!("expected one image: {images:?}");
+        };
+        assert_eq!(image.mime_type, "image/png");
+        let canonical = dunce::canonicalize(&png).unwrap();
+        assert_eq!(
+            image.uri.as_deref(),
+            Some(format!("file://{}", canonical.display()).as_str())
+        );
+    }
+
+    #[test]
+    fn unescaped_quoted_and_punctuated_paths_are_attached_once_each() {
+        let dir = tempfile::tempdir().unwrap();
+        let spaced = write_png(dir.path(), "Screenshot 2026-10-21 at 16.14.49.png");
+        let quoted = write_png(dir.path(), "my shot.png");
+        let plain = write_png(dir.path(), "plain.jpg");
+        let query = format!(
+            "what is in {} and '{}'? also ({}), and again {}.",
+            spaced.display(),
+            quoted.display(),
+            plain.display(),
+            plain.display(),
+        );
+        assert_eq!(inline(&query, dir.path()).len(), 3);
+    }
+
+    #[test]
+    fn inline_paths_that_are_not_attachable_images_are_left_as_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let elsewhere = write_png(outside.path(), "a.png");
+        let attached = write_png(dir.path(), "b.png");
+        std::fs::write(dir.path().join("notes.txt"), "x").unwrap();
+        std::fs::write(dir.path().join("fake.png"), "not a png").unwrap();
+        let query = format!(
+            "{} {} {} {} {}",
+            elsewhere.display(),
+            attached.display(),
+            dir.path().join("notes.txt").display(),
+            dir.path().join("fake.png").display(),
+            dir.path().join("missing.png").display(),
+        );
+        let prefixes = vec![dunce::canonicalize(dir.path()).unwrap()];
+        let mut images = vec![
+            agent_client_protocol::ImageContent::new("x", "image/png")
+                .uri(format!("file://{}", attached.display())),
+        ];
+        assert_eq!(
+            attach_inline_image_paths_with_prefixes(&query, &mut images, &prefixes),
+            0
+        );
+        assert_eq!(images.len(), 1);
+        assert!(inline("no paths here, just /tmp as a word", dir.path()).is_empty());
     }
 }

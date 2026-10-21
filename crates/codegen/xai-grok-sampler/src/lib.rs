@@ -31,6 +31,7 @@ pub mod stream;
 mod stream_classify;
 pub mod types;
 mod viktor_continuation;
+mod viktor_tool_images;
 
 // Public re-exports: the API consumers see
 pub use actor::SamplerActor;

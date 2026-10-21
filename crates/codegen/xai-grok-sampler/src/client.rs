@@ -2079,6 +2079,7 @@ impl SamplingClient {
             .model
             .clone()
             .unwrap_or_else(|| self.defaults.model.clone());
+        crate::viktor_tool_images::move_to_user_message(&effective_model, &mut responses_request);
         let continuation = crate::viktor_continuation::plan(
             x_grok_conv_id.as_deref(),
             &effective_model,
