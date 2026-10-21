@@ -39,6 +39,10 @@ const INCOMPLETE_REASON_VIKTOR_PAUSED: &str = "vktr_viktor_paused";
 const VIKTOR_CAP_REACHED_NOTE: &str = "[Viktor stopped here: this request reached its time limit before the work \
      was finished. Work already done in Viktor's workspace is kept. Ask Viktor to continue to pick up from there.]";
 
+/// How long a held note waits for the event after it. Viktor sends the note and the `incomplete` in one flush, so a
+/// note followed by nothing for this long is reply text, released well before the decoder's idle timeout can fire.
+const VIKTOR_CAP_NOTE_HOLD: Duration = Duration::from_secs(5);
+
 fn is_viktor_cap_note(delta: &str) -> bool {
     delta.strip_prefix("\n\n").unwrap_or(delta) == VIKTOR_CAP_REACHED_NOTE
 }
@@ -63,8 +67,8 @@ fn strip_viktor_cap_note(response: &mut rs::Response) {
 /// vktr, for the Viktor backend only: holds back a text delta that is exactly Viktor's cap note. When the response then
 /// ends `incomplete` (`max_output_tokens`) with no text after the note, Viktor's time limit paused the run: the note is
 /// dropped (only the blank line before it is kept, so the continuation starts a new paragraph) and the reason becomes
-/// [`INCOMPLETE_REASON_VIKTOR_PAUSED`]. Any later text delta, other terminal event, error or end of stream releases the
-/// held delta unchanged.
+/// [`INCOMPLETE_REASON_VIKTOR_PAUSED`]. Any later text delta, other terminal event, error, end of stream or
+/// [`VIKTOR_CAP_NOTE_HOLD`] of silence releases the held delta unchanged.
 pub(crate) fn viktor_cap_note_filter<'a>(
     raw: BoxStream<'a, Result<rs::ResponseStreamEvent, SamplingError>>,
 ) -> BoxStream<'a, Result<rs::ResponseStreamEvent, SamplingError>> {
@@ -72,7 +76,21 @@ pub(crate) fn viktor_cap_note_filter<'a>(
     async_stream::stream! {
         let mut raw = raw;
         let mut held: Option<rs::ResponseTextDeltaEvent> = None;
-        while let Some(item) = raw.next().await {
+        loop {
+            let next = if held.is_some() {
+                match tokio::time::timeout(VIKTOR_CAP_NOTE_HOLD, raw.next()).await {
+                    Ok(next) => next,
+                    Err(_) => {
+                        if let Some(earlier) = held.take() {
+                            yield Ok(Event::ResponseOutputTextDelta(earlier));
+                        }
+                        continue;
+                    }
+                }
+            } else {
+                raw.next().await
+            };
+            let Some(item) = next else { break };
             match item {
                 Ok(Event::ResponseOutputTextDelta(delta)) if is_viktor_cap_note(&delta.delta) => {
                     if let Some(earlier) = held.replace(delta) {
@@ -1275,6 +1293,36 @@ mod tests {
             1,
             "a stream that just ends gives the note back"
         );
+    }
+
+    /// A note followed by silence is released before the decoder's idle timeout can fail the attempt with it held
+    /// (review probe).
+    #[tokio::test(start_paused = true)]
+    async fn a_held_note_is_released_when_nothing_follows() {
+        let stalled = stream::iter(deltas(&[VIKTOR_CAP_REACHED_NOTE]))
+            .chain(stream::pending())
+            .boxed();
+        let events = collect(stream_responses(
+            viktor_cap_note_filter(stalled),
+            None,
+            rid(),
+            Duration::from_secs(60),
+            None,
+        ))
+        .await;
+        let text: String = events
+            .iter()
+            .filter_map(|e| match e {
+                SamplingEvent::ChannelToken {
+                    channel: SamplingChannel::Text,
+                    text,
+                    ..
+                } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(text, VIKTOR_CAP_REACHED_NOTE);
+        assert!(matches!(events.last(), Some(SamplingEvent::Failed { .. })));
     }
 
     /// The decoder itself never holds or rewrites note-like text (review probes).
