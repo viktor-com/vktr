@@ -557,6 +557,7 @@ async fn run_one_attempt(
             .await
         }
         ApiBackend::Responses => {
+            let viktor_cap_note = client.is_viktor_request(&request);
             let (raw, metadata, doom_loop) =
                 match client.conversation_stream_responses(request).await {
                     Ok(parts) => parts,
@@ -582,6 +583,7 @@ async fn run_one_attempt(
                 doom_loop,
                 Arc::clone(&output_observed),
                 failed_response.clone(),
+                viktor_cap_note,
             );
             drive_l2(
                 l2,
@@ -715,7 +717,11 @@ async fn drive_l2(
                     // deterministic — resampling it would retry-storm.
                     let content_filtered = response.stop_reason
                         == Some(xai_grok_sampling_types::StopReason::ContentFilter);
-                    if !content_filtered && let Some(reason) = response.empty_reason() {
+                    // A run paused before it wrote anything is continued by the turn loop, never resent
+                    if !content_filtered
+                        && !response.is_paused_turn()
+                        && let Some(reason) = response.empty_reason()
+                    {
                         let context = build_empty_context(reason, &response);
                         return AttemptOutcome::Empty {
                             context,

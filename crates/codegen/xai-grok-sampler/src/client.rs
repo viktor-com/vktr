@@ -2111,6 +2111,10 @@ impl SamplingClient {
                         Ok(rs::ResponseStreamEvent::ResponseCompleted(done)) => {
                             crate::viktor_continuation::record(&pending, &done.response.id);
                         }
+                        // A cut run's reply is in the thread too, so the next request continues after it
+                        Ok(rs::ResponseStreamEvent::ResponseIncomplete(cut)) => {
+                            crate::viktor_continuation::record(&pending, &cut.response.id);
+                        }
                         Ok(rs::ResponseStreamEvent::ResponseFailed(_)) | Err(_) => {
                             crate::viktor_continuation::forget(pending.conv_id());
                         }
@@ -2120,10 +2124,20 @@ impl SamplingClient {
                 Ok((stream, metadata, doom_loop))
             }
             Err(err) => {
-                crate::viktor_continuation::forget(pending.conv_id());
+                // A busy thread is still this conversation's: the retry continues it once its run stops
+                if !err.is_conversation_busy() {
+                    crate::viktor_continuation::forget(pending.conv_id());
+                }
                 Err(pending.recover(err))
             }
         }
+    }
+
+    /// True when `request` goes to the Viktor compat API (its model, or the default, is a Viktor model).
+    pub(crate) fn is_viktor_request(&self, request: &ConversationRequest) -> bool {
+        crate::viktor_continuation::is_viktor_model(
+            request.model.as_deref().unwrap_or(&self.defaults.model),
+        )
     }
 
     /// Send a conversation request using the Responses API (non-streaming).
@@ -2503,6 +2517,86 @@ mod tests {
     }
 
     const EMPTY_RESPONSE_JSON: &str = r#"{"id":"resp","object":"response","created_at":0,"model":"test-model","status":"completed","output":[],"usage":{"input_tokens":0,"input_tokens_details":{"cached_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":0}}"#;
+
+    /// A continuation after a cut run that meets Viktor's `409 conversation_busy` keeps the thread: the retry resumes it
+    /// instead of replaying into a fresh one (review probe).
+    #[tokio::test]
+    async fn a_busy_continuation_after_a_cut_keeps_the_thread() {
+        use xai_grok_sampling_types::ConversationItem;
+        let captured = Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+        let sink = captured.clone();
+        let app = Router::new().route("/v1/responses", post(move |body: Bytes| {
+            let sink = sink.clone();
+            async move {
+                let n = {
+                    let mut requests = sink.lock().unwrap();
+                    requests.push(serde_json::from_slice(&body).unwrap());
+                    requests.len()
+                };
+                if n == 2 {
+                    return axum::response::Response::builder().status(409).header("content-type", "application/json")
+                        .body(axum::body::Body::from(r#"{"error":{"message":"conversation_busy: response in progress","type":"conflict","code":"conversation_busy"}}"#)).unwrap();
+                }
+                let mut response: serde_json::Value = serde_json::from_str(EMPTY_RESPONSE_JSON).unwrap();
+                response["id"] = serde_json::json!("thread_review_cap");
+                response["model"] = serde_json::json!("viktor");
+                response["status"] = serde_json::json!("incomplete");
+                response["incomplete_details"] = serde_json::json!({"reason":"max_output_tokens"});
+                let frame = serde_json::json!({"type":"response.incomplete","sequence_number":1,"response":response});
+                axum::response::Response::builder().header("content-type", "text/event-stream")
+                    .body(axum::body::Body::from(format!("data: {frame}\n\ndata: [DONE]\n\n"))).unwrap()
+            }
+        }));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let client = SamplingClient::new(SamplerConfig {
+            base_url: format!("http://{addr}/v1"),
+            model: "viktor".into(),
+            api_backend: ApiBackend::Responses,
+            ..minimal_config()
+        })
+        .unwrap();
+        let request = |continuing: bool| {
+            let mut items = vec![ConversationItem::user("work")];
+            if continuing {
+                items.push(ConversationItem::assistant("partial"));
+                items.push(ConversationItem::user("continue"));
+            }
+            ConversationRequest {
+                items,
+                model: Some("viktor".into()),
+                x_grok_conv_id: Some("review_busy_after_incomplete".into()),
+                ..Default::default()
+            }
+        };
+        let (stream, _, _) = client
+            .conversation_stream_responses(request(false))
+            .await
+            .unwrap();
+        let _: Vec<_> = stream.collect().await;
+        assert!(
+            client
+                .conversation_stream_responses(request(true))
+                .await
+                .is_err()
+        );
+        let (stream, _, _) = client
+            .conversation_stream_responses(request(true))
+            .await
+            .unwrap();
+        let _: Vec<_> = stream.collect().await;
+        server.abort();
+        crate::viktor_continuation::forget("review_busy_after_incomplete");
+        let requests = captured.lock().unwrap();
+        assert_eq!(requests[1]["previous_response_id"], "thread_review_cap");
+        assert_eq!(
+            requests[2]["previous_response_id"], "thread_review_cap",
+            "a busy retry must not start a fresh thread"
+        );
+    }
 
     async fn capture_response_body(streaming: bool) -> serde_json::Value {
         let (body_tx, body_rx) = oneshot::channel();

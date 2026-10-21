@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixes
+
+- A long Viktor run that reaches Viktor's 10-minute time limit now carries on by itself in the same
+  turn: no "[Viktor stopped here …]" note, no "Response truncated" error, no need to type "continue"
+
 ### Look and feel
 
 - While Viktor works, the spinner cycles through the Viktor Hero Gradient and a soft highlight

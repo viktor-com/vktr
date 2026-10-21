@@ -745,6 +745,10 @@ impl LengthPolicy {
                 }
             };
         }
+        // A paused turn is not a token cut: its text (possibly none) is whole so far, and the turn loop continues it
+        if response.is_paused_turn() && self != LengthPolicy::Fail {
+            return LengthVerdict::Salvage;
+        }
         if self == LengthPolicy::CompletePartial && response.empty_reason().is_none() {
             LengthVerdict::Salvage
         } else {
@@ -1067,6 +1071,13 @@ impl ConversationResponse {
     /// Reasoning-only responses are considered empty so the retry logic resamples.
     pub fn is_empty(&self) -> bool {
         self.empty_reason().is_some()
+    }
+
+    /// The server paused a long run at its time limit, so the answer goes on in a follow-up request.
+    /// The Responses stream reports it as a `Length` cut carrying the Messages word `pause_turn`.
+    pub fn is_paused_turn(&self) -> bool {
+        self.stop_reason == Some(StopReason::Length)
+            && self.raw_stop_reason.as_deref() == Some("pause_turn")
     }
 
     /// Get tool calls from the assistant message, if any
@@ -4510,6 +4521,36 @@ mod tests {
         assert_eq!(
             LengthPolicy::CompletePartial.verdict(&stop),
             LengthVerdict::Pass
+        );
+    }
+
+    /// A run paused at the server's time limit completes, text or not, so the turn loop can continue it; a real token cut still fails.
+    #[test]
+    fn a_paused_turn_completes_even_when_text_only_or_empty() {
+        let paused = |text: &str| {
+            let mut r = make_response(ConversationItem::assistant(text));
+            r.stop_reason = Some(StopReason::Length);
+            r.raw_stop_reason = Some("pause_turn".into());
+            r
+        };
+        let mut token_cut = paused("partial");
+        token_cut.raw_stop_reason = Some("max_tokens".into());
+        assert!(paused("partial").is_paused_turn());
+        assert!(!token_cut.is_paused_turn());
+        for policy in [
+            LengthPolicy::CompleteToolCalls,
+            LengthPolicy::CompletePartial,
+        ] {
+            assert_eq!(policy.verdict(&paused("partial")), LengthVerdict::Salvage);
+            assert_eq!(policy.verdict(&paused("")), LengthVerdict::Salvage);
+        }
+        assert_eq!(
+            LengthPolicy::CompleteToolCalls.verdict(&token_cut),
+            LengthVerdict::Fail
+        );
+        assert_eq!(
+            LengthPolicy::Fail.verdict(&paused("partial")),
+            LengthVerdict::Fail
         );
     }
 

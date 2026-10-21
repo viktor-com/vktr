@@ -3416,6 +3416,7 @@ impl SessionActor {
             }
             let fallback_text = response.fallback_text();
             let stop_reason = response.stop_reason;
+            let paused_turn = response.is_paused_turn() && tool_calls.is_empty();
             let response_is_empty = response.is_empty();
             let turn_refused =
                 stop_reason == Some(xai_grok_sampling_types::StopReason::ContentFilter);
@@ -3485,6 +3486,37 @@ impl SessionActor {
                 .await;
             }
             self.send_buffered_xai_update(response_completed).await;
+            if paused_turn {
+                if salvage.on_paused_stop() {
+                    let tag = self.reminder_wrapper_tag();
+                    self.chat_state_handle.push_user_message(
+                        ConversationItem::length_continue_reminder(format!(
+                            "<{tag}>{}</{tag}>",
+                            super::length_salvage::PAUSED_TURN_CONTINUE_REMINDER_BODY
+                        )),
+                    );
+                    tracing::info!(
+                        session_id = %self.session_info.id,
+                        continues = salvage.paused_continues(),
+                        max = super::length_salvage::PAUSED_TURN_CONTINUE_BUDGET,
+                        "Run paused at the server's time limit — continuing"
+                    );
+                    xai_grok_telemetry::unified_log::info(
+                        "shell.turn.paused_turn_continue",
+                        Some(self.session_info.id.0.as_ref()),
+                        Some(serde_json::json!({
+                            "continue_attempts": salvage.paused_continues(),
+                            "continue_budget": super::length_salvage::PAUSED_TURN_CONTINUE_BUDGET,
+                        })),
+                    );
+                    continue;
+                }
+                tracing::warn!(
+                    session_id = %self.session_info.id,
+                    continues = salvage.paused_continues(),
+                    "Paused-run continues exhausted, completing the turn truncated"
+                );
+            }
             let schema_complete_at_cap = if stop_reason
                 == Some(xai_grok_sampling_types::StopReason::Length)
                 && tool_calls.is_empty()
@@ -3509,6 +3541,7 @@ impl SessionActor {
             }
             if stop_reason == Some(xai_grok_sampling_types::StopReason::Length)
                 && tool_calls.is_empty()
+                && !paused_turn
                 && schema_complete_at_cap.is_none()
             {
                 match salvage.on_length_stop() {

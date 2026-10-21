@@ -22,6 +22,11 @@ use async_openai::types::responses as rs;
 /// The only model served by the Viktor compat API.
 pub(crate) const VIKTOR_MODEL: &str = "viktor";
 
+/// The Viktor compat API's models: `viktor` and its `viktor/<slug>` variants.
+pub(crate) fn is_viktor_model(model: &str) -> bool {
+    model == VIKTOR_MODEL || model.starts_with("viktor/")
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct Entry {
     response_id: String,
