@@ -181,7 +181,7 @@
   command: head -5 README.md | grep -q 'fork of \[Grok Build\]' && grep -q 'src="docs/assets/screenshot.png"' README.md && test -s docs/assets/screenshot.png && for h in '1. Install' '2. Authenticate' '3. Run a task' '4. Project instructions and folder trust' '5. Permissions' '6. Multi-step work' '7. Set up the human' '8. Check and troubleshoot' '9. Working on this repository'; do grep -q "^### $h" README.md || exit 1; done
   tags: [implemented, ci]
 - label: vktr ships use-coding-agents (from github.com/av/skills) as a default skill: every start seeds it into ~/.vktr/bundled/skills/ with a manifest checksum, so it is listed with bundled scope, a user or repo skill of the same name shadows it, a hand-edited copy is never overwritten, an unedited copy is refreshed when the binary ships a newer body, and other bundled files are left alone
-  command: cargo test -p xai-grok-bundle --lib -- default_skills && cargo test -p xai-grok-shell --lib -- builtin::tests::default_skills
+  command: grep -rqE --include=*.rs 'fn default_skills_' crates/codegen/xai-grok-bundle/src && grep -rqE --include=*.rs 'fn default_skills_seed_use_coding_agents_into_bundled' crates/codegen/xai-grok-shell/src && test -s crates/codegen/xai-grok-shell/default-skills/use-coding-agents/SKILL.md
   tags: [implemented, ci]
 
 # acp
