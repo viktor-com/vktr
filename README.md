@@ -281,6 +281,14 @@ macOS tarballs with `scripts/dist.sh`, stages a draft release, installs that dra
 OS and runs `scripts/smoke-release.sh` there, and only then publishes. Running the workflow by hand
 does the same as a dry run with a throwaway `dryrun-<run id>` prerelease that is deleted afterwards.
 
+Release numbers are `<upstream version>-vktr.<n>`. `<n>` goes up by one with every release, never
+repeats and never restarts, not even when the upstream version changes, so a higher `vktr.<n>` is
+always the newer vktr. Pick `<n>` as one above the highest published so far in either repository
+that has shipped vktr: this one (`gh release list -R viktor-com/vktr`) and the retired
+`av/vktr-rs`, whose releases went up to `1.0.38-vktr.4`. Both repositories published a
+`1.0.38-vktr.3` with different contents; `1.0.38-vktr.5` merged them, and numbering continues from
+there.
+
 ## License
 
 Apache License 2.0. See [`LICENSE`](LICENSE), [`NOTICE`](NOTICE) and
