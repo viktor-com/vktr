@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.0.38-vktr.5 — 2026-10-22
+
+Supersedes `1.0.38-vktr.3` and the `1.0.38-vktr.3` and `1.0.38-vktr.4` builds published from
+`av/vktr-rs`: it has everything in the `1.0.38-vktr.3` below plus the one feature only those
+builds had. From here on release numbers only go up (see "Working on this repository" in the
+README).
+
 - vktr ships a default skill, `use-coding-agents` (from github.com/av/skills): seeded into
   `~/.vktr/bundled/skills/` at start; a user or repo skill of the same name wins, and a hand-edited
   copy is never overwritten

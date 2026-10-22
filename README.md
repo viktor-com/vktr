@@ -47,7 +47,7 @@ to the human: it needs a real terminal and a person at the keyboard.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/viktor-com/vktr/main/install.sh | sh
-vktr --version        # e.g. "vktr 1.0.38-vktr.3 (<commit>)"
+vktr --version        # e.g. "vktr 1.0.38-vktr.5 (<commit>)"
 ```
 
 - Needs no root. The binary goes to `~/.vktr/bin` (`VKTR_INSTALL_DIR`), linked from
